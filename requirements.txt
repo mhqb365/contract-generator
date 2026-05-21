@@ -1,0 +1,6 @@
+pandas
+openpyxl
+docxtpl
+docx2pdf
+pywin32; sys_platform == "win32"
+tkinterdnd2
