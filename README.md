@@ -1,4 +1,4 @@
-![photos](photos.png)
+![photo](photo.png)
 
 ## Cài đặt các thư viện cần thiết
 
@@ -14,27 +14,31 @@ pip install -r requirements.txt
 
 ### 1. Định dạng File Excel đầu vào
 
-File dữ liệu Excel mặc định (ví dụ: `Thông tin làm HỢP ĐỒNG NGUYÊN TẮC.xlsx`) cần có cấu trúc các cột tương ứng như sau (chỉ số cột tính từ 0):
+File dữ liệu Excel mặc định (ví dụ: `Thông tin làm HỢP ĐỒNG NGUYÊN TẮC.xlsx`) cần có cấu trúc các cột tương ứng như sau. Dòng đầu tiên được xem là dòng tiêu đề và chương trình bắt đầu đọc dữ liệu từ dòng thứ 2.
 
 |  Cột  | Tên Cột (Chỉ số)  | Dữ Liệu Tương Ứng | Mô tả / Thẻ điền trong Word    |
 | :---: | :---------------- | :---------------- | :----------------------------- |
-| **B** | Column index `1`  | Tên Công Ty       | `{{ten_cong_ty}}`              |
-| **C** | Column index `2`  | Mã Số Thuế        | `{{ma_so_thue}}`               |
-| **D** | Column index `3`  | Địa Chỉ           | `{{dia_chi}}`                  |
-| **F** | Column index `5`  | Số Tài Khoản      | Kết hợp làm `{{so_tai_khoan}}` |
-| **G** | Column index `6`  | Tên Ngân Hàng     | Kết hợp làm `{{so_tai_khoan}}` |
-| **J** | Column index `9`  | Người Đại Diện    | `{{nguoi_dai_dien}}`           |
-| **K** | Column index `10` | Chức Vụ           | `{{chuc_vu}}`                  |
+| **B** | Column index `1`  | Số HĐ             | `{{so_hd}}`                    |
+| **C** | Column index `2`  | Tên HĐ            | `{{ten_hd}}`                   |
+| **D** | Column index `3`  | Tên Công Ty       | `{{ten_cong_ty}}`              |
+| **E** | Column index `4`  | Mã Số Thuế        | `{{ma_so_thue}}`               |
+| **F** | Column index `5`  | Địa Chỉ           | `{{dia_chi}}`                  |
+| **H** | Column index `7`  | Số Tài Khoản      | Kết hợp làm `{{so_tai_khoan_ngan_hang}}` |
+| **I** | Column index `8`  | Tên Ngân Hàng     | Kết hợp làm `{{so_tai_khoan_ngan_hang}}` |
+| **K** | Column index `10` | Sale phụ trách    | Dùng để lọc và tạo thư mục     |
+| **L** | Column index `11` | Người Đại Diện    | `{{nguoi_dai_dien}}`           |
+| **M** | Column index `12` | Chức Vụ           | `{{chuc_vu}}`                  |
 
 ### 2. Các thẻ giữ chỗ (Placeholders) trong Template Word
 
 Trong file mẫu `templates/HDNT.doc` (hoặc `.docx`), bạn có thể sử dụng các thẻ sau để chương trình tự động điền thông tin:
 
-- `{{thoi_gian_tao}}`: Tự động điền ngày hiện tại dưới dạng `ngày DD tháng MM năm YYYY`.
+- `{{so_hd}}`: Số hợp đồng.
+- `{{ten_hd}}`: Tên hợp đồng.
 - `{{ten_cong_ty}}`: Tên đầy đủ của công ty đối tác.
 - `{{ma_so_thue}}`: Mã số thuế của doanh nghiệp.
 - `{{dia_chi}}`: Địa chỉ đăng ký kinh doanh.
-- `{{so_tai_khoan}}`: Số tài khoản ngân hàng ghép dạng: `[Số tài khoản] Mở tại [Tên ngân hàng]`.
+- `{{so_tai_khoan_ngan_hang}}`: Số tài khoản ngân hàng ghép dạng: `[Số tài khoản] Mở tại [Tên ngân hàng]`.
 - `{{nguoi_dai_dien}}`: Họ và tên người đại diện pháp luật.
 - `{{chuc_vu}}`: Chức vụ của người đại diện (ví dụ: Giám đốc, Tổng giám đốc...).
 
@@ -65,6 +69,17 @@ Nếu bạn muốn tích hợp công cụ vào một quy trình tự động hó
    python generate_contracts.py
    ```
 3. Chương trình sẽ tự động đọc, xử lý và lưu kết quả vào thư mục `contracts/`.
+
+### Build app macOS khi không có máy Mac
+
+Project có sẵn GitHub Actions để build file `.app` trên máy macOS của GitHub:
+
+1. Push code lên GitHub.
+2. Vào tab **Actions**.
+3. Chọn workflow **Build macOS app**.
+4. Nhấn **Run workflow**.
+5. Khi workflow chạy xong, tải artifact **Contract-Generator-macOS**.
+6. Giải nén file `Contract-Generator-macOS.zip`, bên trong có `Contract Generator.app`.
 
 ---
 
