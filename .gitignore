@@ -1,6 +1,7 @@
 .agent
+.DS_Store
 GEMINI.md
 ERRORS.md
-
+__MACOSX
 __pycache__
 contracts
