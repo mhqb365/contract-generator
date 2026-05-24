@@ -48,7 +48,7 @@ def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
                 text=True,
             )
             if result.returncode != 0:
-                log(f"   ⚠️ Loi xuat PDF LibreOffice '{os.path.basename(docx_path)}': {result.stderr.strip()}")
+                log(f"   Loi xuat PDF LibreOffice '{os.path.basename(docx_path)}': {result.stderr.strip()}")
                 continue
                 
             pdf_path = docx_path.replace(".docx", ".pdf")
@@ -232,11 +232,11 @@ def get_responsible_persons(excel_path, log=print):
     :param log: Callback function for logging (default: print).
     :return: Dictionary with responsible persons and their statistics
     """
-    log("📂 Đang đọc dữ liệu từ Excel...")
+    log("Đang đọc dữ liệu từ Excel...")
     try:
         df = pd.read_excel(excel_path, header=None)
     except Exception as e:
-        log(f"❌ Lỗi đọc file Excel: {e}")
+        log(f"Lỗi đọc file Excel: {e}")
         return {}
 
     # Auto-detect header row by checking column B (index 1)
@@ -274,6 +274,18 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     :param output_format: "docx", "pdf" or "both".
     :param responsible_person: Filter by responsible person (None = all).
     """
+    # Safe folder/file name (remove Vietnamese diacritics and special characters completely)
+    # Normalize to NFKD form and remove combining marks (diacritics)
+    def sanitize_name(name):
+        if not name:
+            return ""
+        # Manual replacement for Đ/đ as NFKD doesn't convert it to D/d
+        name = name.replace('đ', 'd').replace('Đ', 'D')
+        normalized = unicodedata.normalize('NFKD', name)
+        no_diacritics = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+        sanitized = "".join([c for c in no_diacritics if c.isalnum() or c in (' ', '-', '_')]).strip()
+        return " ".join(sanitized.split())
+
     script_dir = pathlib.Path(__file__).parent
     template_path = str(script_dir / "templates" / "HDNT.doc")
     base_output_dir = str(script_dir / "contracts")
@@ -281,12 +293,12 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     if not os.path.exists(base_output_dir):
         os.makedirs(base_output_dir)
 
-    log("📂 Đang đọc dữ liệu từ Excel...")
+    log("Đang đọc dữ liệu từ Excel...")
     try:
         # header=None to read all rows including the first, avoiding data loss
         df = pd.read_excel(excel_path, header=None)
     except Exception as e:
-        log(f"❌ Lỗi đọc file Excel: {e}")
+        log(f"Lỗi đọc file Excel: {e}")
         log("   Hãy đảm bảo file không đang được mở trong Excel.")
         return False
 
@@ -295,11 +307,11 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     # Convert .doc template to .docx
     actual_template_path = get_docx_path(template_path, log)
     if not actual_template_path.endswith('.docx'):
-        log("❌ CẢNH BÁO: Không thể tự động chuyển đổi file .doc.")
+        log("CẢNH BÁO: Không thể tự động chuyển đổi file .doc.")
         log("   Vui lòng mở file templates/HDNT.doc bằng Microsoft Word, nhấn 'Save As' -> .docx")
         return False
 
-    log("📝 Bắt đầu tạo hợp đồng...")
+    log("Bắt đầu xử lý...")
     count = 0
     generated_docs = []
 
@@ -341,10 +353,27 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         else:
             so_tai_khoan_ngan_hang = so_tai_khoan or ngan_hang
 
+        safe_company_name = sanitize_name(ten_cong_ty)
+        safe_person_name = sanitize_name(nguoi_phu_trach) if nguoi_phu_trach else "Unknown"
+
+        # Create folder structure: contracts/HDNT [người phụ trách]/[công ty]/
+        person_dir = os.path.join(base_output_dir, f"HDNT {safe_person_name}")
+        company_dir = os.path.join(person_dir, safe_company_name)
+        output_filepath = os.path.join(company_dir, f"{safe_company_name}.docx")
+
+        if output_format == "pdf":
+            if os.path.exists(output_filepath):
+                generated_docs.append(output_filepath)
+                count += 1
+            else:
+                log(f"   Chưa có file Word: HDNT {safe_person_name}/{safe_company_name}.docx (Hãy tạo Docx trước)")
+            continue
+
+        # If format is docx or both, generate the docx file
         try:
             doc = DocxTemplate(actual_template_path)
         except Exception as e:
-            log(f"❌ Lỗi nạp template: {e}")
+            log(f"Lỗi nạp template: {e}")
             break
 
         context = {
@@ -360,46 +389,28 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
 
         doc.render(context)
 
-        # Safe folder/file name (remove Vietnamese diacritics and special characters completely)
-        # Normalize to NFKD form and remove combining marks (diacritics)
-        def sanitize_name(name):
-            if not name:
-                return ""
-            # Manual replacement for Đ/đ as NFKD doesn't convert it to D/d
-            name = name.replace('đ', 'd').replace('Đ', 'D')
-            normalized = unicodedata.normalize('NFKD', name)
-            no_diacritics = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
-            sanitized = "".join([c for c in no_diacritics if c.isalnum() or c in (' ', '-', '_')]).strip()
-            return " ".join(sanitized.split())
-
-        safe_company_name = sanitize_name(ten_cong_ty)
-        safe_person_name = sanitize_name(nguoi_phu_trach) if nguoi_phu_trach else "Unknown"
-
-        # Create folder structure: contracts/HDNT [người phụ trách]/[công ty]/
-        person_dir = os.path.join(base_output_dir, f"HDNT {safe_person_name}")
-        company_dir = os.path.join(person_dir, safe_company_name)
-        
         if not os.path.exists(company_dir):
             os.makedirs(company_dir)
-
-        output_filepath = os.path.join(company_dir, f"{safe_company_name}.docx")
 
         try:
             doc.save(output_filepath)
             generated_docs.append(output_filepath)
-            log(f"   ✅ DOCX: HDNT {safe_person_name}/{safe_company_name}.docx")
+            log(f"   DOCX: HDNT {safe_person_name}/{safe_company_name}.docx")
             count += 1
         except Exception as e:
-            log(f"   ⚠️ Lỗi lưu file '{safe_company_name}': {e}")
+            log(f"   Lỗi lưu file '{safe_company_name}': {e}")
 
-    log(f"\n✅ Đã tạo {count} file Word trong thư mục 'contracts'.")
+    if output_format == "pdf":
+        log(f"\nĐã tìm thấy {count} file Word sẵn sàng để chuyển đổi sang PDF.")
+    else:
+        log(f"\nĐã tạo {count} file Word trong thư mục 'contracts'.")
 
     should_convert_pdf = output_format in ("pdf", "both")
     if not should_convert_pdf:
         return True
 
     if count == 0:
-        log("❌ Không có file DOCX để chuyển đổi sang PDF.")
+        log("Không có file DOCX để chuyển đổi sang PDF.")
         return False
 
     if output_format == "pdf":
@@ -413,7 +424,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         if find_libreoffice():
             return convert_docx_to_pdfs(generated_docs, log)
         else:
-            log("\n⚠️ LibreOffice không được cài đặt. Bỏ qua chuyển đổi PDF.")
+            log("\nLibreOffice không được cài đặt. Bỏ qua chuyển đổi PDF.")
             log("   Để convert PDF trên macOS, cài đặt LibreOffice:")
             log("   https://www.libreoffice.org/download/download/")
             return True  # Still return True vì DOCX đã được tạo thành công

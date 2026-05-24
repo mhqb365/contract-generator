@@ -10,7 +10,7 @@ pip install -r requirements.txt
 
 ---
 
-## 📝 Định Dạng Dữ Liệu Excel & Template
+## Định Dạng Dữ Liệu Excel & Template
 
 ### 1. Định dạng File Excel đầu vào
 
@@ -40,7 +40,7 @@ Trong file mẫu `templates/HDNT.doc` (hoặc `.docx`), bạn có thể sử d�
 
 ---
 
-## 🚀 Hướng Dẫn Sử Dụng
+## Hướng Dẫn Sử Dụng
 
 ### Cách 1: Sử dụng Giao Diện Đồ Họa GUI (Khuyên dùng)
 
@@ -51,9 +51,9 @@ Trong file mẫu `templates/HDNT.doc` (hoặc `.docx`), bạn có thể sử d�
    python app.py
    ```
 2. Thực hiện kéo thả file Excel vào vùng **"Kéo & Thả file .xlsx vào đây"** hoặc click vào đó để chọn file Excel từ máy tính của bạn.
-3. Nhấn nút **🚀 Tạo Hợp Đồng** để bắt đầu.
+3. Nhấn nút **Tạo Hợp Đồng** để bắt đầu.
 4. Theo dõi tiến trình tạo file DOCX và PDF chi tiết ngay tại bảng **Log** phía dưới.
-5. Khi hoàn tất, nhấn nút **📁 Mở thư mục chứa Hợp Đồng** để truy cập ngay danh sách hợp đồng đã xuất bản.
+5. Khi hoàn tất, nhấn nút **Mở thư mục chứa Hợp Đồng** để truy cập ngay danh sách hợp đồng đã xuất bản.
 
 ### Cách 2: Sử dụng Dòng lệnh CLI (Không cần giao diện)
 
@@ -68,7 +68,7 @@ Nếu bạn muốn tích hợp công cụ vào một quy trình tự động hó
 
 ---
 
-## ⚠️ Lưu Ý Quan Trọng khi Sử Dụng
+## Lưu Ý Quan Trọng khi Sử Dụng
 
 1. **Tránh xung đột File**: Hãy đóng file Excel dữ liệu và file mẫu Template Word trước khi nhấn nút chạy tool để tránh lỗi quyền truy cập file (`Permission Error`).
 2. **Microsoft Word**: Quá trình chuyển đổi `.doc` -> `.docx` và xuất PDF yêu cầu ứng dụng MS Word phải được cài đặt và kích hoạt bình thường trên hệ thống Windows.

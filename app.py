@@ -103,12 +103,12 @@ class App(_BASE):
         header.pack(fill="x", padx=30)
 
         tk.Label(
-            header, text="📄 Tạo Hợp Đồng Nguyên Tắc",
+            header, text="Tạo Hợp Đồng Nguyên Tắc",
             font=FONT_TITLE, bg=BG_DARK, fg=TEXT_PRIMARY
         ).pack(anchor="w")
         tk.Label(
             header,
-            text="Kéo thả file Excel đúng định dạng vào khung bên dưới hoặc click vào để chọn file, rồi bấm Tạo HĐ Docx hoặc Tạo HĐ PDF",
+            text="Kéo thả file Excel thông tin vào khung bên dưới hoặc click vào để chọn file. Sau đó bấm nút Tạo HĐ",
             font=FONT_SUB, bg=BG_DARK, fg=TEXT_MUTED
         ).pack(anchor="w", pady=(2, 0))
 
@@ -121,13 +121,13 @@ class App(_BASE):
             highlightbackground=BORDER, highlightthickness=2,
             cursor="hand2"
         )
-        self.drop_zone.pack(fill="x", ipady=22)
+        self.drop_zone.pack(fill="x", ipady=10)
 
         self.drop_icon = tk.Label(
-            self.drop_zone, text="⬆", font=("Segoe UI", 30),
+            self.drop_zone, text="Chọn file", font=("Segoe UI", 14, "bold"),
             bg=BG_DROP, fg=ACCENT
         )
-        self.drop_icon.pack(pady=(18, 4))
+        self.drop_icon.pack(pady=(10, 3))
 
         self.drop_label = tk.Label(
             self.drop_zone,
@@ -139,7 +139,7 @@ class App(_BASE):
         tk.Label(
             self.drop_zone, text="hoặc click để chọn file",
             font=FONT_DROP_SM, bg=BG_DROP, fg=TEXT_MUTED
-        ).pack(pady=(2, 18))
+        ).pack(pady=(2, 10))
 
         # Bind click events for all children
         for widget in [self.drop_zone, self.drop_icon, self.drop_label]:
@@ -163,7 +163,7 @@ class App(_BASE):
         self.selector_frame.pack(fill="x", pady=(8, 12))
 
         tk.Label(
-            self.selector_frame, text="👥 Sale phụ trách",
+            self.selector_frame, text="Sale phụ trách",
             font=FONT_SUB, bg=BG_DARK, fg=TEXT_MUTED
         ).pack(anchor="w", pady=(0, 4))
 
@@ -187,7 +187,7 @@ class App(_BASE):
 
         self.docx_btn = tk.Button(
             btn_frame,
-            text="📄 Tạo HĐ Docx",
+            text="Tạo HĐ Docx",
             font=FONT_BTN,
             bg=ACCENT, fg="#0a0a0a",
             activebackground=ACCENT_GLOW, activeforeground="#0a0a0a",
@@ -200,7 +200,7 @@ class App(_BASE):
 
         self.pdf_btn = tk.Button(
             btn_frame,
-            text="🖨 Tạo HĐ PDF",
+            text="Tạo HĐ PDF",
             font=FONT_BTN,
             bg=ACCENT, fg="#0a0a0a",
             activebackground=ACCENT_GLOW, activeforeground="#0a0a0a",
@@ -213,7 +213,7 @@ class App(_BASE):
 
         self.clear_btn = tk.Button(
             btn_frame,
-            text="🗑 Xoá Log",
+            text="Xoá Log",
             font=FONT_BTN,
             bg=BG_CARD, fg=TEXT_MUTED,
             activebackground=BORDER, activeforeground=TEXT_PRIMARY,
@@ -226,7 +226,7 @@ class App(_BASE):
 
         self.open_btn = tk.Button(
             btn_frame,
-            text="📁 Mở thư mục chứa Hợp Đồng",
+            text="Mở thư mục Hợp Đồng",
             font=FONT_BTN,
             bg=BG_CARD, fg=TEXT_MUTED,
             activebackground=BORDER, activeforeground=TEXT_PRIMARY,
@@ -244,7 +244,7 @@ class App(_BASE):
         log_header = tk.Frame(self, bg=BG_DARK, padx=30, pady=8)
         log_header.pack(fill="x")
         tk.Label(
-            log_header, text="📋 Log",
+            log_header, text="Log",
             font=FONT_LABEL, bg=BG_DARK, fg=TEXT_PRIMARY
         ).pack(side="left")
 
@@ -301,7 +301,7 @@ class App(_BASE):
         self.log_box.tag_config("muted",   foreground=TEXT_MUTED)
         self.log_box.tag_config("time",    foreground="#4b5563")
 
-        self._log("Kéo file Excel vào khung phía trên để bắt đầu. Tạo Docx trước mới tạo được PDF.", "muted")
+        self._log("Kéo file Excel vào khung phía trên. Tạo Docx trước mới tạo được PDF.", "muted")
 
     # ── Drag-and-drop setup ────────────────────────────────────────────────────
     def _setup_drag_drop(self):
@@ -309,24 +309,29 @@ class App(_BASE):
             try:
                 self.drop_zone.drop_target_register(DND_FILES)
                 self.drop_zone.dnd_bind('<<Drop>>', self._on_drop)
-                # self._log("✅ Drag-and-drop đã sẵn sàng.", "muted")
+                # self._log("Drag-and-drop đã sẵn sàng.", "muted")
             except Exception as e:
-                self._log(f"ℹ️  Drag-drop lỗi: {e}. Dùng nút chọn file.", "warning")
+                self._log(f"Drag-drop lỗi: {e}. Dùng nút chọn file.", "warning")
         else:
-            self._log("ℹ️  Kéo-thả không khả dụng (pip install tkinterdnd2). Dùng nút chọn file.", "warning")
+            self._log("Kéo-thả không khả dụng (pip install tkinterdnd2). Dùng nút chọn file.", "warning")
 
     def _on_drop(self, event):
         """Handle file drop event."""
+        if self.is_running:
+            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi chọn file khác.", "warning")
+            return
         raw = event.data.strip()
         # Path may be wrapped in braces on Windows: {C:/path/to/file.xlsx}
         path = raw.strip('{}').split('} {')[0].strip('{}')
         if path.lower().endswith('.xlsx') or path.lower().endswith('.xls'):
             self._set_file(path)
         else:
-            self._log(f"⚠️ Chỉ chấp nhận file .xlsx hoặc .xls, bạn thả: {os.path.basename(path)}", "warning")
+            self._log(f"Chỉ chấp nhận file .xlsx hoặc .xls, bạn thả: {os.path.basename(path)}", "warning")
 
     # ── Helpers ────────────────────────────────────────────────────────────────
     def _drop_hover(self, entering: bool):
+        if self.is_running:
+            return
         color = BG_DROP_HOVER if entering else BG_DROP
         border = ACCENT if entering else BORDER
         self.drop_zone.config(bg=color, highlightbackground=border)
@@ -339,6 +344,9 @@ class App(_BASE):
                 pass
 
     def _browse_file(self):
+        if self.is_running:
+            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi chọn file khác.", "warning")
+            return
         path = filedialog.askopenfilename(
             title="Chọn file Excel",
             filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
@@ -349,9 +357,9 @@ class App(_BASE):
     def _set_file(self, path: str):
         self.excel_path.set(path)
         filename = os.path.basename(path)
-        self.drop_label.config(text=f"📊  {filename}", fg=SUCCESS)
+        self.drop_label.config(text=filename, fg=SUCCESS)
         self.path_label.config(fg=TEXT_MUTED)
-        self._log(f"📂 File được chọn: {path}", "accent")
+        self._log(f"File được chọn: {path}", "accent")
         
         # Load responsible persons into combobox
         self.after(100, lambda: self._load_responsible_persons(self.excel_path.get()))
@@ -381,9 +389,9 @@ class App(_BASE):
                 )
                 self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
                 self.person_menu.pack(fill="x", padx=0)
-                self._log(f"✅ Tìm thấy {len(person_list)} sale phụ trách", "success")
+                self._log(f"Tìm thấy {len(person_list)} sale phụ trách", "success")
         except Exception as e:
-            self._log(f"⚠️ Lỗi tải danh sách sale phụ trách: {e}", "warning")
+            self._log(f"Lỗi tải danh sách sale phụ trách: {e}", "warning")
 
     def _log(self, message: str, tag: str = ""):
         """Append a message to the log box (thread-safe)."""
@@ -397,14 +405,15 @@ class App(_BASE):
         self.after(0, _append)
 
     def _smart_log(self, message: str):
-        """Auto-detect log level from message emoji."""
-        if message.startswith("❌"):
+        """Auto-detect log level from plain-text message prefixes."""
+        normalized = message.strip()
+        if normalized.startswith(("Lỗi", "CẢNH BÁO", "Không có file DOCX", "Không thể")):
             tag = "error"
-        elif message.startswith("⚠️"):
+        elif normalized.startswith(("Cảnh báo", "Chưa", "LibreOffice không", "Không tìm thấy")):
             tag = "warning"
-        elif message.startswith("✅") or message.startswith("🎉"):
+        elif normalized.startswith(("Đã", "Tìm thấy", "Hoàn tất")):
             tag = "success"
-        elif message.startswith("📂") or message.startswith("📝") or message.startswith("📄"):
+        elif normalized.startswith(("Đang", "Bắt đầu", "DOCX:", "PDF:")):
             tag = "accent"
         else:
             tag = ""
@@ -425,33 +434,33 @@ class App(_BASE):
             else:
                 subprocess.Popen(["xdg-open", folder])
         else:
-            self._log("⚠️ Thư mục 'contracts' chưa tồn tại. Hãy tạo hợp đồng trước.", "warning")
+            self._log("Thư mục 'contracts' chưa tồn tại. Hãy tạo hợp đồng trước.", "warning")
 
     def _show_responsible_persons(self):
         excel = self.excel_path.get().strip()
         if not excel:
-            self._log("⚠️ Chưa chọn file Excel! Vui lòng kéo thả hoặc nhấn chọn file.", "warning")
+            self._log("Chưa chọn file Excel! Vui lòng kéo thả hoặc nhấn chọn file.", "warning")
             return
         if not os.path.exists(excel):
-            self._log(f"❌ Không tìm thấy file: {excel}", "error")
+            self._log(f"Không tìm thấy file: {excel}", "error")
             return
 
-        self._log("─" * 55, "muted")
-        self._log("📋 Lấy danh sách sale phụ trách...", "accent")
+        self._log("-" * 55, "muted")
+        self._log("Lấy danh sách sale phụ trách...", "accent")
         
         persons = get_responsible_persons(excel, log=self._smart_log)
         
         if not persons:
-            self._log("⚠️ Không tìm thấy sale phụ trách nào trong file.", "warning")
+            self._log("Không tìm thấy sale phụ trách nào trong file.", "warning")
             return
         
-        self._log(f"✅ Tìm thấy {len(persons)} sale phụ trách:\n", "success")
+        self._log(f"Tìm thấy {len(persons)} sale phụ trách:\n", "success")
         
         for idx, (person, companies) in enumerate(sorted(persons.items()), 1):
             unique_companies = list(set(companies))
             self._log(f"  {idx}. {person} - Quản lý {len(unique_companies)} công ty", "")
             for company in sorted(unique_companies)[:5]:  # Show first 5 companies
-                self._log(f"     • {company}", "muted")
+                self._log(f"     - {company}", "muted")
             if len(unique_companies) > 5:
                 self._log(f"     ... và {len(unique_companies) - 5} công ty khác", "muted")
 
@@ -461,30 +470,31 @@ class App(_BASE):
             return
         excel = self.excel_path.get().strip()
         if not excel:
-            self._log("⚠️ Chưa chọn file Excel! Vui lòng kéo thả hoặc nhấn chọn file.", "warning")
+            self._log("Chưa chọn file Excel! Vui lòng kéo thả hoặc nhấn chọn file.", "warning")
             return
         if not os.path.exists(excel):
-            self._log(f"❌ Không tìm thấy file: {excel}", "error")
+            self._log(f"Không tìm thấy file: {excel}", "error")
             return
 
         self.is_running = True
         active_button = self.docx_btn if output_format == "docx" else self.pdf_btn
-        active_text = "⏳  Đang tạo Docx..." if output_format == "docx" else "⏳  Đang tạo PDF..."
+        active_text = "Đang tạo Docx..." if output_format == "docx" else "Đang tạo PDF..."
 
         for btn in (self.docx_btn, self.pdf_btn):
             btn.config(state="disabled", bg="#504124", fg="#8e8e93")
+        self.person_menu.config(state="disabled")
         active_button.config(text=active_text)
 
-        self.status_label.config(text="Đang chạy...", fg=WARNING)
-        self._log("─" * 55, "muted")
+        self.status_label.config(text="Đang tạo...", fg=WARNING)
+        self._log("-" * 55, "muted")
         
         selected_person = self.responsible_person.get().strip()
         if selected_person and selected_person != "(Tất cả)":
-            self._log(f"🚀 Bắt đầu xử lý file: {os.path.basename(excel)} (Sale phụ trách: {selected_person})", "accent")
+            self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} (Sale phụ trách: {selected_person})", "accent")
             # Pass actual person name
             thread = threading.Thread(target=self._run_worker, args=(excel, output_format, selected_person), daemon=True)
         else:
-            self._log(f"🚀 Bắt đầu xử lý file: {os.path.basename(excel)} (Tất cả sale phụ trách)", "accent")
+            self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} (Tất cả sale phụ trách)", "accent")
             # Pass None to generate all
             thread = threading.Thread(target=self._run_worker, args=(excel, output_format, ""), daemon=True)
 
@@ -499,13 +509,14 @@ class App(_BASE):
             else:
                 self.after(0, lambda: self.status_label.config(text="Có lỗi xảy ra", fg=WARNING))
         except Exception as e:
-            self._log(f"❌ Lỗi không mong muốn: {e}", "error")
-            self.after(0, lambda: self.status_label.config(text="❌ Lỗi", fg=ERROR_CLR))
+            self._log(f"Lỗi không mong muốn: {e}", "error")
+            self.after(0, lambda: self.status_label.config(text="Lỗi", fg=ERROR_CLR))
         finally:
             self.is_running = False
             self.after(0, lambda: [
-                self.docx_btn.config(state="normal", text="📄 Tạo HĐ Docx", bg=ACCENT, fg="#0a0a0a"),
-                self.pdf_btn.config(state="normal", text="🖨 Tạo HĐ PDF", bg=ACCENT, fg="#0a0a0a")
+                self.docx_btn.config(state="normal", text="Tạo HĐ Docx", bg=ACCENT, fg="#0a0a0a"),
+                self.pdf_btn.config(state="normal", text="Tạo HĐ PDF", bg=ACCENT, fg="#0a0a0a"),
+                self.person_menu.config(state="normal")
             ])
 
 
