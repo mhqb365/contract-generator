@@ -9,6 +9,7 @@ from datetime import datetime
 from docxtpl import DocxTemplate
 import pathlib
 import unicodedata
+from data_config import get_role_value, load_data_fields, load_template_path, make_row_context
 
 try:
     import win32com.client as win32
@@ -36,7 +37,7 @@ def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
     if not soffice:
         return None
 
-    log("Dang xuat PDF bang LibreOffice headless...")
+    log("Đan xuất PDF bằng LibreOffice headless...")
     pdf_count = 0
     for docx_path in generated_docs:
         try:
@@ -48,18 +49,18 @@ def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
                 text=True,
             )
             if result.returncode != 0:
-                log(f"   Loi xuat PDF LibreOffice '{os.path.basename(docx_path)}': {result.stderr.strip()}")
+                log(f"Lỗi xuất PDF LibreOffice '{os.path.basename(docx_path)}': {result.stderr.strip()}")
                 continue
                 
             pdf_path = docx_path.replace(".docx", ".pdf")
             if os.path.exists(pdf_path):
-                log(f"   PDF:  {os.path.basename(pdf_path)}")
+                log(f"PDF:  {os.path.basename(pdf_path)}")
                 pdf_count += 1
         except Exception as e:
-            log(f"   Loi xuat PDF bang LibreOffice '{os.path.basename(docx_path)}': {e}")
+            log(f"Lỗi xuất PDF bằng LibreOffice '{os.path.basename(docx_path)}': {e}")
 
     if pdf_count > 0:
-        log(f"\nHoan tat! Da xuat {pdf_count} file PDF.")
+        log(f"\nHoàn tất! Đã xuất {pdf_count} file PDF.")
         return True
     return False
 
@@ -70,21 +71,21 @@ def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print):
         # pyrefly: ignore [missing-import]
         from docx2pdf import convert as docx2pdf_convert
     except ImportError:
-        log("Khong tim thay docx2pdf.")
+        log("Không tìm thấy docx2pdf.")
         return None
 
-    log("Dang xuat PDF bang Microsoft Word/docx2pdf...")
+    log("Đang xuất PDF bằng Microsoft Word/docx2pdf...")
     pdf_count = 0
     for docx_path in generated_docs:
         pdf_path = docx_path.replace(".docx", ".pdf")
         try:
             docx2pdf_convert(docx_path, pdf_path)
-            log(f"   PDF:  {os.path.basename(pdf_path)}")
+            log(f"PDF:  {os.path.basename(pdf_path)}")
             pdf_count += 1
         except Exception as e:
-            log(f"   Loi xuat PDF bang Microsoft Word/macOS '{os.path.basename(docx_path)}': {e}")
+            log(f"Lỗi xuất PDF bằng Microsoft Word/macOS '{os.path.basename(docx_path)}': {e}")
     if pdf_count:
-        log(f"\nHoan tat! Da xuat {pdf_count} file PDF.")
+        log(f"\nHoàn tất! Đã xuất {pdf_count} file PDF.")
         return True
 
     return False
@@ -93,23 +94,23 @@ def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print):
 def convert_docx_to_pdfs(generated_docs, log=print):
     """Export generated DOCX files to PDF using the best available platform tool."""
     if not generated_docs:
-        log("\nKhong co file Word nao de xuat PDF.")
+        log("\nKhông có file Word nào để xuất PDF.")
         return True
 
-    log("\nBat dau xuat PDF (co the mat vai phut)...")
+    log("\nBắt đầu xuất PDF (có thể mất vài phút)...")
 
     if os.name != "nt":
         libreoffice_result = convert_docx_to_pdfs_with_libreoffice(generated_docs, log)
         if libreoffice_result is not None:
             return libreoffice_result
 
-        log("Khong tim thay LibreOffice. Se thu Microsoft Word/docx2pdf.")
+        log("Không tìm thấy LibreOffice. sẽ thử Microsoft Word/docx2pdf.")
         docx2pdf_result = convert_docx_to_pdfs_with_docx2pdf(generated_docs, log)
         if docx2pdf_result is not None:
             return docx2pdf_result
 
-        log("\nKhong the xuat PDF tren may nay.")
-        log("   macOS nen cai LibreOffice de xuat PDF headless, khong can mo Microsoft Word.")
+        log("\nKhông thể xuất PDF trên máy này.")
+        log("macOS nen cai LibreOffice de xuat PDF headless, không cần mở Microsoft Word.")
         return False
 
     if win32 is not None:
@@ -135,14 +136,14 @@ def convert_docx_to_pdfs(generated_docs, log=print):
                     doc_obj.SaveAs(str(pathlib.Path(pdf_path).absolute()), FileFormat=17)
                     doc_obj.Close(0)  # 0 = wdDoNotSaveChanges
                     pdf_name = os.path.basename(pdf_path)
-                    log(f"   PDF:  {pdf_name}")
+                    log(f"PDF:  {pdf_name}")
                     pdf_count += 1
                 except Exception as e:
-                    log(f"   Loi xuat PDF '{os.path.basename(docx_path)}': {e}")
-            log(f"\nHoan tat! Da xuat {pdf_count} file PDF.")
+                    log(f"Lỗi xuất PDF '{os.path.basename(docx_path)}': {e}")
+            log(f"\nHoàn tất! Đã xuất {pdf_count} file PDF.")
             return True
         except Exception as e:
-            log(f"\nLoi khi khoi dong Word de xuat PDF: {e}")
+            log(f"\nLỗi khi khởi động Word để xuất PDF: {e}")
             return False
         finally:
             if word is not None:
@@ -164,8 +165,8 @@ def convert_docx_to_pdfs(generated_docs, log=print):
     if libreoffice_result is not None:
         return libreoffice_result
 
-    log("\nKhong the xuat PDF tren may nay.")
-    log("   Hay cai Microsoft Word/docx2pdf hoac LibreOffice de xuat PDF.")
+    log("\nKhông thể xuất PDF trên máy này.")
+    log("Hãy cài Microsoft Word/docx2pdf hoặc LibreOffice để xuất PDF.")
     return False
 
 
@@ -182,7 +183,7 @@ def get_docx_path(template_path, log=print):
         return docx_path
 
     if win32 is None:
-        log("Khong the tu dong chuyen doi file .doc tren he dieu hanh nay. Vui long dung template .docx.")
+        log("Không thể tự động chuyển đổi file .doc trên hệ điều hành này. Vui lòng dùng template .docx.")
         return template_path
 
     log(f"Đang tự động chuyển đổi '{template_path}' sang .docx ...")
@@ -237,36 +238,33 @@ def get_contract_preview(excel_path, log=print):
     Read Excel rows and return contract data for GUI preview.
     row_index is the original DataFrame index, used later to generate selected rows.
     """
-    log("Dang doc du lieu tu Excel...")
+    log("Đang đọc dữ liệu từ Excel...")
     try:
         df = pd.read_excel(excel_path, header=None)
     except Exception as e:
-        log(f"Loi doc file Excel: {e}")
+        log(f"Lỗi đọc file Excel: {e}")
         return []
 
+    data_fields = load_data_fields()
     preview_rows = []
     start_idx = 1
 
     for index in range(start_idx, len(df)):
         row = df.iloc[index]
-        ten_cong_ty = _get_cell_value(row, 3)
+        context = make_row_context(row, data_fields)
+        ten_cong_ty = get_role_value(context, data_fields, "company")
 
         if not ten_cong_ty:
             continue
 
-        preview_rows.append({
+        preview_row = {
             "row_index": index,
-            "so_hd": _get_cell_value(row, 1),
-            "ten_hd": _get_cell_value(row, 2),
-            "ten_cong_ty": ten_cong_ty,
-            "ma_so_thue": _get_cell_value(row, 4),
-            "dia_chi": _get_cell_value(row, 5),
-            "so_tai_khoan": _get_cell_value(row, 7),
-            "ngan_hang": _get_cell_value(row, 8),
-            "nguoi_phu_trach": _get_cell_value(row, 10),
-            "nguoi_dai_dien": _get_cell_value(row, 11),
-            "chuc_vu": _get_cell_value(row, 12),
-        })
+            "_context": context,
+            "_company": ten_cong_ty,
+            "_responsible_person": get_role_value(context, data_fields, "responsible_person"),
+        }
+        preview_row.update(context)
+        preview_rows.append(preview_row)
 
     return preview_rows
 
@@ -285,16 +283,17 @@ def get_responsible_persons(excel_path, log=print):
         log(f"Lỗi đọc file Excel: {e}")
         return {}
 
-    # Auto-detect header row by checking column B (index 1)
     start_idx = 1
+    data_fields = load_data_fields()
 
     persons_data = {}
     
     for index in range(start_idx, len(df)):
         row = df.iloc[index]
         
-        ten_cong_ty = _get_cell_value(row, 3)
-        nguoi_phu_trach = _get_cell_value(row, 10)
+        context = make_row_context(row, data_fields)
+        ten_cong_ty = get_role_value(context, data_fields, "company")
+        nguoi_phu_trach = get_role_value(context, data_fields, "responsible_person")
 
         if not ten_cong_ty or not nguoi_phu_trach:
             continue
@@ -307,7 +306,7 @@ def get_responsible_persons(excel_path, log=print):
     return persons_data
 
 
-def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None):
+def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None, template_path=None):
     """
     Main contract generation logic.
     :param excel_path: Path to the Excel data file.
@@ -315,6 +314,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     :param output_format: "docx", "pdf" or "both".
     :param responsible_person: Filter by responsible person (None = all).
     :param selected_rows: Optional iterable of DataFrame row indexes selected in GUI.
+    :param template_path: Optional Word template path. Uses saved settings when omitted.
     """
     # Safe folder/file name (remove Vietnamese diacritics and special characters completely)
     # Normalize to NFKD form and remove combining marks (diacritics)
@@ -329,7 +329,11 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         return " ".join(sanitized.split())
 
     script_dir = pathlib.Path(__file__).parent
-    template_path = str(script_dir / "templates" / "HDNT.doc")
+    template_path = template_path or load_template_path()
+    template_path_obj = pathlib.Path(template_path)
+    if not template_path_obj.is_absolute():
+        template_path_obj = script_dir / template_path_obj
+    template_path = str(template_path_obj)
     base_output_dir = str(script_dir / "contracts")
 
     if not os.path.exists(base_output_dir):
@@ -341,22 +345,27 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         df = pd.read_excel(excel_path, header=None)
     except Exception as e:
         log(f"Lỗi đọc file Excel: {e}")
-        log("   Hãy đảm bảo file không đang được mở trong Excel.")
+        log("Hãy đảm bảo file không đang được mở trong Excel.")
         return False
 
-    log(f"   Đọc được {len(df)} dòng dữ liệu.")
+    log(f"Đọc được {len(df)} dòng dữ liệu.")
+
+    if not os.path.exists(template_path):
+        log(f"Không tìm thấy file template: {template_path}")
+        return False
 
     # Convert .doc template to .docx
     actual_template_path = get_docx_path(template_path, log)
     if not actual_template_path.endswith('.docx'):
         log("CẢNH BÁO: Không thể tự động chuyển đổi file .doc.")
-        log("   Vui lòng mở file templates/HDNT.doc bằng Microsoft Word, nhấn 'Save As' -> .docx")
+        log("Vui lòng mở file templates/HDNT.doc bằng Microsoft Word, nhấn 'Save As' -> .docx")
         return False
 
     log("Bắt đầu xử lý...")
     count = 0
     generated_docs = []
     selected_row_set = set(selected_rows) if selected_rows is not None else None
+    data_fields = load_data_fields()
 
     # Bỏ qua dòng 1 (dòng tiêu đề)
     start_idx = 1
@@ -384,6 +393,9 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         nguoi_phu_trach = get_val(10)
         nguoi_dai_dien = get_val(11)
         chuc_vu = get_val(12)
+        context = make_row_context(row, data_fields)
+        ten_cong_ty = get_role_value(context, data_fields, "company")
+        nguoi_phu_trach = get_role_value(context, data_fields, "responsible_person")
 
         # Skip rows with no company name
         if not ten_cong_ty:
@@ -412,7 +424,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
                 generated_docs.append(output_filepath)
                 count += 1
             else:
-                log(f"   Chưa có file Word: HDNT {safe_person_name}/{safe_company_name}.docx (Hãy tạo Docx trước)")
+                log(f"Chưa có file Word: HDNT {safe_person_name}/{safe_company_name}.docx (Hãy tạo Docx trước)")
             continue
 
         # If format is docx or both, generate the docx file
@@ -433,6 +445,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
             "chuc_vu":                chuc_vu
         }
 
+        context = make_row_context(row, data_fields)
         doc.render(context)
 
         if not os.path.exists(company_dir):
@@ -441,10 +454,10 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         try:
             doc.save(output_filepath)
             generated_docs.append(output_filepath)
-            log(f"   DOCX: HDNT {safe_person_name}/{safe_company_name}.docx")
+            log(f"DOCX: HDNT {safe_person_name}/{safe_company_name}.docx")
             count += 1
         except Exception as e:
-            log(f"   Lỗi lưu file '{safe_company_name}': {e}")
+            log(f"Lỗi lưu file '{safe_company_name}': {e}")
 
     if output_format == "pdf":
         log(f"\nĐã tìm thấy {count} file Word sẵn sàng để chuyển đổi sang PDF.")
@@ -471,8 +484,8 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
             return convert_docx_to_pdfs(generated_docs, log)
         else:
             log("\nLibreOffice không được cài đặt. Bỏ qua chuyển đổi PDF.")
-            log("   Để convert PDF trên macOS, cài đặt LibreOffice:")
-            log("   https://www.libreoffice.org/download/download/")
+            log("Để convert PDF trên macOS, cài đặt LibreOffice:")
+            log("https://www.libreoffice.org/download/download/")
             return True  # Still return True vì DOCX đã được tạo thành công
 
 

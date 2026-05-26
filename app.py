@@ -36,6 +36,7 @@ except ImportError:
 
 # Import logic module
 from generate_contracts import generate, get_contract_preview, get_responsible_persons
+from data_config import default_fields, default_template_path, load_data_settings, save_data_settings
 
 # ── Color palette (Luxury Gold & Black) ──────────────────────────────────────────
 BG_DARK       = "#0a0a0a"  # Obsidian black
@@ -96,11 +97,35 @@ class App(_BASE):
         self.preview_rows = []
         self.filtered_preview_rows = []
         self.selected_row_ids = set()
+        self.data_settings = load_data_settings()
+        self.data_fields = self.data_settings["fields"]
+        self.template_path = tk.StringVar(value=self.data_settings["template_path"])
+        self._init_template_path()
         self.is_running  = False
 
         self._build_ui()
         self.company_search.trace_add("write", lambda *_: self._on_company_search_changed())
         self._setup_drag_drop()
+
+    def _resolve_app_path(self, path: str) -> str:
+        if not path:
+            return ""
+        if os.path.isabs(path):
+            return path
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), path)
+
+    def _init_template_path(self):
+        configured = self.data_settings.get("template_path", default_template_path())
+        default_path = default_template_path()
+        chosen = configured or default_path
+        if os.path.exists(self._resolve_app_path(chosen)):
+            self.template_path.set(chosen)
+            return
+        if chosen != default_path and os.path.exists(self._resolve_app_path(default_path)):
+            self.template_path.set(default_path)
+            save_data_settings(self.data_fields, default_path)
+            return
+        self.template_path.set("")
 
     # ── UI Layout ──────────────────────────────────────────────────────────────
     def _build_ui(self):
@@ -112,25 +137,51 @@ class App(_BASE):
             header, text="Tạo Hợp Đồng Nguyên Tắc",
             font=FONT_TITLE, bg=BG_DARK, fg=TEXT_PRIMARY
         ).pack(anchor="w")
-        tk.Label(
-            header,
-            text="Kéo thả file Excel thông tin vào khung bên dưới hoặc click vào để chọn file. Sau đó bấm nút Tạo HĐ",
-            font=FONT_SUB, bg=BG_DARK, fg=TEXT_MUTED
-        ).pack(anchor="w", pady=(2, 0))
 
         # ── Drop zone ──
         drop_frame = tk.Frame(self, bg=BG_DARK, padx=30)
         drop_frame.pack(fill="x", pady=(0, 10))
+
+        self.template_drop_zone = tk.Frame(
+            drop_frame, bg=BG_DROP,
+            highlightbackground=BORDER, highlightthickness=2,
+            cursor="hand2"
+        )
+        self.template_drop_zone.pack(side="left", fill="both", expand=True, ipady=1, padx=(0, 6))
+
+        self.template_drop_icon = tk.Label(
+            self.template_drop_zone, text="Mẫu HĐ", font=("Segoe UI", 11, "bold"),
+            bg=BG_DROP, fg=ACCENT
+        )
+        self.template_drop_icon.pack(pady=(2, 0))
+
+        self.template_drop_label = tk.Label(
+            self.template_drop_zone,
+            text="Kéo & Thả file .docx/.doc vào đây" if not self.template_path.get().strip() else os.path.basename(self.template_path.get()),
+            font=FONT_SUB, bg=BG_DROP,
+            fg=TEXT_PRIMARY if not self.template_path.get().strip() else SUCCESS
+        )
+        self.template_drop_label.pack()
+
+        tk.Label(
+            self.template_drop_zone, text="hoặc click để chọn file",
+            font=FONT_DROP_SM, bg=BG_DROP, fg=TEXT_MUTED
+        ).pack(pady=(0, 2))
+
+        for widget in [self.template_drop_zone, self.template_drop_icon, self.template_drop_label]:
+            widget.bind("<Button-1>", lambda e: self._browse_template())
+            widget.bind("<Enter>",    lambda e: self._template_drop_hover(True))
+            widget.bind("<Leave>",    lambda e: self._template_drop_hover(False))
 
         self.drop_zone = tk.Frame(
             drop_frame, bg=BG_DROP,
             highlightbackground=BORDER, highlightthickness=2,
             cursor="hand2"
         )
-        self.drop_zone.pack(fill="x", ipady=1)
+        self.drop_zone.pack(side="right", fill="both", expand=True, ipady=1, padx=(6, 0))
 
         self.drop_icon = tk.Label(
-            self.drop_zone, text="Chọn file", font=("Segoe UI", 14, "bold"),
+            self.drop_zone, text="Dữ liệu Excel", font=("Segoe UI", 14, "bold"),
             bg=BG_DROP, fg=ACCENT
         )
         self.drop_icon.config(font=("Segoe UI", 11, "bold"))
@@ -369,53 +420,13 @@ class App(_BASE):
 
         self.preview_tree = ttk.Treeview(
             preview_table_frame,
-            columns=(
-                "checked",
-                "so_hd",
-                "ten_hd",
-                "company",
-                "tax",
-                "address",
-                "account",
-                "bank",
-                "person",
-                "representative",
-                "position",
-            ),
+            columns=self._preview_columns(),
             show="headings",
             height=6,
             style="ContractPreview.Treeview",
             selectmode="none"
         )
-        self.preview_tree.heading("ten_hd", text="Ten HD")
-        self.preview_tree.heading("address", text="Dia chi")
-        self.preview_tree.heading("account", text="So tai khoan")
-        self.preview_tree.heading("bank", text="Ngan hang")
-        self.preview_tree.heading("position", text="Chuc vu")
-        self.preview_tree.heading("checked", text="Chon")
-        self.preview_tree.heading("so_hd", text="So HD")
-        self.preview_tree.heading("company", text="Ten cong ty")
-        self.preview_tree.heading("tax", text="Ma so thue")
-        self.preview_tree.heading("person", text="Sale")
-        self.preview_tree.heading("representative", text="Dai dien")
-
-        self.preview_tree.column("checked", width=58, minwidth=58, stretch=False, anchor="center")
-        self.preview_tree.column("so_hd", width=90, minwidth=70, stretch=False)
-        self.preview_tree.column("company", width=260, minwidth=180)
-        self.preview_tree.column("tax", width=130, minwidth=110, stretch=False)
-        self.preview_tree.column("person", width=140, minwidth=110)
-        self.preview_tree.column("representative", width=150, minwidth=110)
-        self.preview_tree.column("checked", width=58, minwidth=58, stretch=False, anchor="center")
-        self.preview_tree.column("so_hd", width=80, minwidth=70, stretch=False)
-        self.preview_tree.column("ten_hd", width=180, minwidth=140, stretch=False)
-        self.preview_tree.column("company", width=300, minwidth=220, stretch=False)
-        self.preview_tree.column("tax", width=130, minwidth=110, stretch=False)
-        self.preview_tree.column("address", width=360, minwidth=240, stretch=False)
-        self.preview_tree.column("account", width=150, minwidth=120, stretch=False)
-        self.preview_tree.column("bank", width=240, minwidth=180, stretch=False)
-        self.preview_tree.column("person", width=170, minwidth=130, stretch=False)
-        self.preview_tree.column("representative", width=170, minwidth=130, stretch=False)
-        self.preview_tree.column("position", width=130, minwidth=100, stretch=False)
+        self._configure_preview_columns()
 
         preview_scroll = ttk.Scrollbar(preview_table_frame, orient="vertical", command=self.preview_tree.yview)
         self.preview_tree.configure(yscrollcommand=preview_scroll.set)
@@ -472,6 +483,19 @@ class App(_BASE):
             command=self._clear_log
         )
         self.clear_btn.pack(side="left", padx=(10, 0))
+
+        self.settings_btn = tk.Button(
+            btn_frame,
+            text="Thiết lập dữ liệu",
+            font=FONT_BTN,
+            bg=BG_CARD, fg=TEXT_MUTED,
+            activebackground=BORDER, activeforeground=TEXT_PRIMARY,
+            relief="flat", bd=0,
+            padx=18, pady=10,
+            cursor="hand2",
+            command=self._open_data_settings
+        )
+        self.settings_btn.pack(side="left", padx=(10, 0))
 
         self.open_btn = tk.Button(
             btn_frame,
@@ -550,14 +574,162 @@ class App(_BASE):
         self.log_box.tag_config("muted",   foreground=TEXT_MUTED)
         self.log_box.tag_config("time",    foreground="#4b5563")
 
-        self._log("Kéo file Excel vào khung phía trên. Tạo Docx trước mới tạo được PDF.", "muted")
+        self._log("Kéo file .xlsx vào khung Dữ liệu Excel. Tạo HĐ Docx trước mới tạo được HĐ PDF.", "muted")
 
     # ── Drag-and-drop setup ────────────────────────────────────────────────────
+    def _preview_columns(self):
+        return ("checked", *[field["template_name"] for field in self.data_fields])
+
+    def _configure_preview_columns(self):
+        self.preview_tree["columns"] = self._preview_columns()
+        self.preview_tree.heading("checked", text="Chọn")
+        self.preview_tree.column("checked", width=58, minwidth=58, stretch=False, anchor="center")
+
+        for field in self.data_fields:
+            column_id = field["template_name"]
+            self.preview_tree.heading(column_id, text=field["display_name"])
+            width = 300 if field.get("role") == "company" else 160
+            minwidth = 220 if field.get("role") == "company" else 110
+            self.preview_tree.column(column_id, width=width, minwidth=minwidth, stretch=False)
+
+    def _open_data_settings(self):
+        if self.is_running:
+            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi thiết lập dữ liệu.", "warning")
+            return
+
+        window = tk.Toplevel(self)
+        window.title("Thiết lập dữ liệu")
+        window.configure(bg=BG_DARK)
+        window.transient(self)
+        window.grab_set()
+        window.geometry("760x520")
+        window.minsize(680, 420)
+
+        tk.Label(window, text="Thiết lập dữ liệu", font=FONT_LABEL, bg=BG_DARK, fg=TEXT_PRIMARY).pack(anchor="w", padx=18, pady=(16, 8))
+
+        table_frame = tk.Frame(window, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
+        table_frame.pack(fill="both", expand=True, padx=18, pady=(0, 12))
+
+        tree = ttk.Treeview(table_frame, columns=("template_name", "excel_column", "display_name"), show="headings", height=12, style="ContractPreview.Treeview", selectmode="browse")
+        tree.heading("template_name", text="{{template_name}}")
+        tree.heading("excel_column", text="Cột Excel")
+        tree.heading("display_name", text="Header bảng")
+        tree.column("template_name", width=240, minwidth=180, stretch=True)
+        tree.column("excel_column", width=100, minwidth=80, stretch=False)
+        tree.column("display_name", width=260, minwidth=160, stretch=True)
+        tree.pack(side="left", fill="both", expand=True)
+
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+
+        editor = tk.Frame(window, bg=BG_DARK)
+        editor.pack(fill="x", padx=18, pady=(0, 12))
+
+        field_template_var = tk.StringVar()
+        column_var = tk.StringVar()
+        display_var = tk.StringVar()
+
+        def make_entry(label, var, width):
+            box = tk.Frame(editor, bg=BG_DARK)
+            box.pack(side="left", padx=(0, 10), fill="x", expand=True)
+            tk.Label(box, text=label, font=FONT_DROP_SM, bg=BG_DARK, fg=TEXT_MUTED).pack(anchor="w")
+            entry = tk.Entry(box, textvariable=var, font=FONT_PATH, bg=BG_CARD, fg=TEXT_PRIMARY, insertbackground=ACCENT, relief="flat", bd=0, width=width)
+            entry.pack(fill="x", ipady=5)
+            return entry
+
+        make_entry("Template", field_template_var, 24)
+        make_entry("Cột", column_var, 8)
+        make_entry("Header", display_var, 20)
+
+        working_fields = [dict(field) for field in self.data_fields]
+
+        def reload_tree():
+            tree.delete(*tree.get_children())
+            for idx, field in enumerate(working_fields):
+                tree.insert("", "end", iid=str(idx), values=(f"{{{{{field['template_name']}}}}}", field["excel_column"], field["display_name"]))
+
+        def selected_index():
+            selection = tree.selection()
+            return int(selection[0]) if selection else None
+
+        def fill_editor(_event=None):
+            idx = selected_index()
+            if idx is None:
+                return
+            field = working_fields[idx]
+            field_template_var.set(field["template_name"])
+            column_var.set(field["excel_column"])
+            display_var.set(field["display_name"])
+
+        def apply_editor():
+            idx = selected_index()
+            if idx is None:
+                return
+            name = field_template_var.get().strip().strip("{} ")
+            column = column_var.get().strip().upper()
+            display = display_var.get().strip()
+            if not name or not column:
+                self._log("Template và cột Excel không được để trống.", "warning")
+                return
+            working_fields[idx].update({"template_name": name, "excel_column": column, "display_name": display or name})
+            reload_tree()
+            tree.selection_set(str(idx))
+
+        def add_field():
+            working_fields.append({"template_name": "truong_moi", "excel_column": "A", "display_name": "Trường mới", "role": ""})
+            reload_tree()
+            tree.selection_set(str(len(working_fields) - 1))
+            fill_editor()
+
+        def remove_field():
+            idx = selected_index()
+            if idx is None:
+                return
+            del working_fields[idx]
+            reload_tree()
+            if working_fields:
+                tree.selection_set(str(min(idx, len(working_fields) - 1)))
+                fill_editor()
+
+        def reset_defaults():
+            working_fields[:] = default_fields()
+            reload_tree()
+            if working_fields:
+                tree.selection_set("0")
+                fill_editor()
+
+        def save_and_close():
+            apply_editor()
+            self.data_fields = save_data_settings(working_fields, self.template_path.get().strip())
+            self._configure_preview_columns()
+            if self.excel_path.get().strip():
+                self._load_responsible_persons(self.excel_path.get())
+                self._load_contract_preview(self.excel_path.get())
+            self._log("Đã lưu thiết lập dữ liệu vào data_fields.json", "success")
+            window.destroy()
+
+        tree.bind("<<TreeviewSelect>>", fill_editor)
+        reload_tree()
+        if working_fields:
+            tree.selection_set("0")
+            fill_editor()
+
+        buttons = tk.Frame(window, bg=BG_DARK)
+        buttons.pack(fill="x", padx=18, pady=(0, 16))
+
+        for text, command in (("Cập nhật dòng", apply_editor), ("Thêm", add_field), ("Xóa", remove_field), ("Mặc định", reset_defaults)):
+            tk.Button(buttons, text=text, font=FONT_DROP_SM, bg=BG_CARD, fg=TEXT_MUTED, activebackground=BORDER, activeforeground=TEXT_PRIMARY, relief="flat", bd=0, padx=12, pady=7, cursor="hand2", command=command).pack(side="left", padx=(0, 8))
+
+        tk.Button(buttons, text="Lưu", font=FONT_BTN, bg=ACCENT, fg="#0a0a0a", activebackground=ACCENT_GLOW, activeforeground="#0a0a0a", relief="flat", bd=0, padx=22, pady=8, cursor="hand2", command=save_and_close).pack(side="right")
+
     def _setup_drag_drop(self):
         if _DND_AVAILABLE:
             try:
                 self.drop_zone.drop_target_register(DND_FILES)
                 self.drop_zone.dnd_bind('<<Drop>>', self._on_drop)
+                self.template_drop_zone.drop_target_register(DND_FILES)
+                self.template_drop_zone.dnd_bind('<<Drop>>', self._on_template_drop)
                 # self._log("Drag-and-drop đã sẵn sàng.", "muted")
             except Exception as e:
                 self._log(f"Drag-drop lỗi: {e}. Dùng nút chọn file.", "warning")
@@ -577,6 +749,17 @@ class App(_BASE):
         else:
             self._log(f"Chỉ chấp nhận file .xlsx hoặc .xls, bạn thả: {os.path.basename(path)}", "warning")
 
+    def _on_template_drop(self, event):
+        if self.is_running:
+            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi chọn template khác.", "warning")
+            return
+        raw = event.data.strip()
+        path = raw.strip('{}').split('} {')[0].strip('{}')
+        if path.lower().endswith(('.docx', '.doc')):
+            self._set_template_file(path)
+        else:
+            self._log(f"Chỉ chấp nhận file .docx hoặc .doc, bạn thả: {os.path.basename(path)}", "warning")
+
     # ── Helpers ────────────────────────────────────────────────────────────────
     def _drop_hover(self, entering: bool):
         if self.is_running:
@@ -587,6 +770,20 @@ class App(_BASE):
         self.drop_icon.config(bg=color)
         self.drop_label.config(bg=color)
         for w in self.drop_zone.winfo_children():
+            try:
+                w.config(bg=color)
+            except Exception:
+                pass
+
+    def _template_drop_hover(self, entering: bool):
+        if self.is_running:
+            return
+        color = BG_DROP_HOVER if entering else BG_DROP
+        border = ACCENT if entering else BORDER
+        self.template_drop_zone.config(bg=color, highlightbackground=border)
+        self.template_drop_icon.config(bg=color)
+        self.template_drop_label.config(bg=color)
+        for w in self.template_drop_zone.winfo_children():
             try:
                 w.config(bg=color)
             except Exception:
@@ -603,6 +800,20 @@ class App(_BASE):
         if path:
             self._set_file(path)
 
+    def _browse_template(self):
+        if self.is_running:
+            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi chọn template khác.", "warning")
+            return
+        current = self.template_path.get().strip()
+        initial_dir = os.path.dirname(self._resolve_app_path(current)) if current else os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
+        path = filedialog.askopenfilename(
+            title="Chọn file mẫu HĐ",
+            initialdir=initial_dir if os.path.exists(initial_dir) else None,
+            filetypes=[("Mẫu HĐ", "*.docx *.doc"), ("All files", "*.*")]
+        )
+        if path:
+            self._set_template_file(path)
+
     def _set_file(self, path: str):
         self.excel_path.set(path)
         filename = os.path.basename(path)
@@ -612,6 +823,12 @@ class App(_BASE):
         # Load responsible persons and contract rows from Excel
         self.after(100, lambda: self._load_responsible_persons(self.excel_path.get()))
         self.after(120, lambda: self._load_contract_preview(self.excel_path.get()))
+
+    def _set_template_file(self, path: str):
+        self.template_path.set(path)
+        self.template_drop_label.config(text=os.path.basename(path), fg=SUCCESS)
+        save_data_settings(self.data_fields, path)
+        self._log(f"Mẫu HĐ được chọn: {path}", "accent")
 
     def _load_responsible_persons(self, excel_path: str):
         """Load responsible persons from Excel into OptionMenu."""
@@ -655,11 +872,11 @@ class App(_BASE):
             self._refresh_preview_table()
 
             if self.preview_rows:
-                self._log(f"Da tai {len(self.preview_rows)} dong thong tin hop dong", "success")
+                self._log(f"Đã tải {len(self.preview_rows)} dòng thông tin hợp đồng", "success")
             else:
-                self._log("Khong tim thay dong hop dong hop le trong file Excel.", "warning")
+                self._log("Không tìm thấy dòng hợp đồng hợp lệ trong file Excel.", "warning")
         except Exception as e:
-            self._log(f"Loi tai danh sach thong tin: {e}", "warning")
+            self._log(f"Lỗi tải danh sách thông tin: {e}", "warning")
 
     def _is_all_responsible_person_selected(self) -> bool:
         selected_person = self.responsible_person.get().strip()
@@ -673,7 +890,7 @@ class App(_BASE):
             selected_person = self.responsible_person.get().strip()
             rows = [
                 row for row in self.preview_rows
-                if row["nguoi_phu_trach"] == selected_person
+                if row.get("_responsible_person", "") == selected_person
             ]
 
         keyword = self._normalize_search_text(self.company_search.get())
@@ -682,7 +899,7 @@ class App(_BASE):
 
         return [
             row for row in rows
-            if keyword in self._normalize_search_text(row["ten_cong_ty"])
+            if keyword in self._normalize_search_text(row.get("_company", ""))
         ]
 
     def _normalize_search_text(self, text: str) -> str:
@@ -706,16 +923,7 @@ class App(_BASE):
                 tags=("normal",),
                 values=(
                     self._checkbox_text(row["row_index"]),
-                    row["so_hd"],
-                    row["ten_hd"],
-                    row["ten_cong_ty"],
-                    row["ma_so_thue"],
-                    row["dia_chi"],
-                    row["so_tai_khoan"],
-                    row["ngan_hang"],
-                    row["nguoi_phu_trach"],
-                    row["nguoi_dai_dien"],
-                    row["chuc_vu"],
+                    *[row.get(field["template_name"], "") for field in self.data_fields],
                 )
             )
 
@@ -906,6 +1114,13 @@ class App(_BASE):
         if not os.path.exists(excel):
             self._log(f"Không tìm thấy file: {excel}", "error")
             return
+        template = self.template_path.get().strip()
+        if not template:
+            self._log("Chưa chọn file mẫu HĐ! Vui lòng kéo thả hoặc click chọn template.", "warning")
+            return
+        if not os.path.exists(self._resolve_app_path(template)):
+            self._log(f"Không tìm thấy file template: {template}", "error")
+            return
 
         selected_row_ids = None
         if self.preview_rows:
@@ -915,7 +1130,7 @@ class App(_BASE):
             ]
 
         if self.preview_rows and not selected_row_ids:
-            self._log("Chua chon thong tin nao de xuat hop dong.", "warning")
+            self._log("Chưa chọn thông tin nào để xuất hợp đồng.", "warning")
             return
 
         self.is_running = True
@@ -953,6 +1168,7 @@ class App(_BASE):
                 output_format=output_format,
                 responsible_person=responsible_person if responsible_person else None,
                 selected_rows=selected_rows,
+                template_path=self.template_path.get().strip(),
             )
             if success:
                 self.after(0, lambda: self.status_label.config(text="Hoàn tất", fg=SUCCESS))

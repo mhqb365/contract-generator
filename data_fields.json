@@ -1,0 +1,65 @@
+{
+  "template_path": "C:/Users/Windows/Desktop/HDNT.docx",
+  "fields": [
+    {
+      "template_name": "so_hd",
+      "excel_column": "B",
+      "display_name": "Số HĐ",
+      "role": "contract_number"
+    },
+    {
+      "template_name": "ten_hd",
+      "excel_column": "C",
+      "display_name": "Tên HĐ",
+      "role": "contract_name"
+    },
+    {
+      "template_name": "ten_cong_ty",
+      "excel_column": "D",
+      "display_name": "Tên công ty",
+      "role": "company"
+    },
+    {
+      "template_name": "ma_so_thue",
+      "excel_column": "E",
+      "display_name": "Mã số thuế",
+      "role": "tax_code"
+    },
+    {
+      "template_name": "dia_chi",
+      "excel_column": "F",
+      "display_name": "Địa chỉ",
+      "role": "address"
+    },
+    {
+      "template_name": "so_tai_khoan",
+      "excel_column": "H",
+      "display_name": "Số tài khoản",
+      "role": "account_number"
+    },
+    {
+      "template_name": "ngan_hang",
+      "excel_column": "I",
+      "display_name": "Ngân hàng",
+      "role": "bank"
+    },
+    {
+      "template_name": "nguoi_phu_trach",
+      "excel_column": "K",
+      "display_name": "Sale",
+      "role": "responsible_person"
+    },
+    {
+      "template_name": "nguoi_dai_dien",
+      "excel_column": "L",
+      "display_name": "Đại diện",
+      "role": "representative"
+    },
+    {
+      "template_name": "chuc_vu",
+      "excel_column": "M",
+      "display_name": "Chức vụ",
+      "role": "position"
+    }
+  ]
+}
