@@ -23,6 +23,7 @@ from tkinter import filedialog, scrolledtext
 from tkinter import ttk
 import tkinter.font as tkfont
 from datetime import datetime
+import unicodedata
 
 # Try importing tkinterdnd2 for native drag-and-drop
 try:
@@ -34,7 +35,7 @@ except ImportError:
     _DND_AVAILABLE = False
 
 # Import logic module
-from generate_contracts import generate, get_responsible_persons
+from generate_contracts import generate, get_contract_preview, get_responsible_persons
 
 # ── Color palette (Luxury Gold & Black) ──────────────────────────────────────────
 BG_DARK       = "#0a0a0a"  # Obsidian black
@@ -69,7 +70,7 @@ class App(_BASE):
         self.title("Contract Generator")
         self.configure(bg=BG_DARK)
         self.resizable(True, True)
-        self.minsize(700, 600)
+        self.minsize(860, 720)
 
         # Set window icon if icon.ico exists
         try:
@@ -84,16 +85,21 @@ class App(_BASE):
             pass
 
         # Center window
-        self.geometry("820x680")
+        self.geometry("980x780")
         self.update_idletasks()
-        x = (self.winfo_screenwidth() - 820) // 2
-        y = (self.winfo_screenheight() - 680) // 2
-        self.geometry(f"820x680+{x}+{y}")
+        x = (self.winfo_screenwidth() - 980) // 2
+        y = (self.winfo_screenheight() - 780) // 2
+        self.geometry(f"980x780+{x}+{y}")
 
         self.excel_path = tk.StringVar(value="")
+        self.company_search = tk.StringVar(value="")
+        self.preview_rows = []
+        self.filtered_preview_rows = []
+        self.selected_row_ids = set()
         self.is_running  = False
 
         self._build_ui()
+        self.company_search.trace_add("write", lambda *_: self._on_company_search_changed())
         self._setup_drag_drop()
 
     # ── UI Layout ──────────────────────────────────────────────────────────────
@@ -114,32 +120,33 @@ class App(_BASE):
 
         # ── Drop zone ──
         drop_frame = tk.Frame(self, bg=BG_DARK, padx=30)
-        drop_frame.pack(fill="x")
+        drop_frame.pack(fill="x", pady=(0, 10))
 
         self.drop_zone = tk.Frame(
             drop_frame, bg=BG_DROP,
             highlightbackground=BORDER, highlightthickness=2,
             cursor="hand2"
         )
-        self.drop_zone.pack(fill="x", ipady=10)
+        self.drop_zone.pack(fill="x", ipady=1)
 
         self.drop_icon = tk.Label(
             self.drop_zone, text="Chọn file", font=("Segoe UI", 14, "bold"),
             bg=BG_DROP, fg=ACCENT
         )
-        self.drop_icon.pack(pady=(10, 3))
+        self.drop_icon.config(font=("Segoe UI", 11, "bold"))
+        self.drop_icon.pack(pady=(2, 0))
 
         self.drop_label = tk.Label(
             self.drop_zone,
             text="Kéo & Thả file .xlsx vào đây",
-            font=FONT_DROP, bg=BG_DROP, fg=TEXT_PRIMARY
+            font=FONT_SUB, bg=BG_DROP, fg=TEXT_PRIMARY
         )
         self.drop_label.pack()
 
         tk.Label(
             self.drop_zone, text="hoặc click để chọn file",
             font=FONT_DROP_SM, bg=BG_DROP, fg=TEXT_MUTED
-        ).pack(pady=(2, 10))
+        ).pack(pady=(0, 2))
 
         # Bind click events for all children
         for widget in [self.drop_zone, self.drop_icon, self.drop_label]:
@@ -149,18 +156,18 @@ class App(_BASE):
 
         # ── Selected file path display ──
         path_frame = tk.Frame(self, bg=BG_DARK, padx=30)
-        path_frame.pack(fill="x", pady=(8, 0))
+        path_frame.pack_forget()
 
         self.path_label = tk.Label(
             path_frame, textvariable=self.excel_path,
             font=FONT_PATH, bg=BG_DARK, fg=TEXT_MUTED,
             anchor="w", wraplength=760
         )
-        self.path_label.pack(fill="x")
+        self.path_label.pack_forget()
 
         # ── Responsible person selector ──
         self.selector_frame = tk.Frame(self, bg=BG_DARK, padx=30)
-        self.selector_frame.pack(fill="x", pady=(8, 12))
+        # The sale filter is displayed in the preview header below.
 
         tk.Label(
             self.selector_frame, text="Sale phụ trách",
@@ -168,10 +175,11 @@ class App(_BASE):
         ).pack(anchor="w", pady=(0, 4))
 
         self.responsible_person = tk.StringVar(value="")
+        self.responsible_person.trace_add("write", lambda *_: self._on_responsible_person_changed())
         self.person_menu = tk.OptionMenu(
             self.selector_frame,
             self.responsible_person,
-            "(Tất cả)"
+            "Tất cả"
         )
         self.person_menu.config(
             bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB,
@@ -180,6 +188,247 @@ class App(_BASE):
         )
         self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
         self.person_menu.pack(fill="x", padx=0)
+
+        # ── Excel preview with row selection ──
+        self.preview_frame = tk.Frame(self, bg=BG_DARK, padx=30)
+        self.preview_frame.pack(fill="both", expand=False, pady=(0, 8))
+
+        preview_header = tk.Frame(self.preview_frame, bg=BG_DARK)
+        preview_header.pack(fill="x", pady=(0, 4))
+
+        tk.Label(
+            preview_header, text="Danh sách thông tin",
+            font=FONT_LABEL, bg=BG_DARK, fg=TEXT_PRIMARY
+        ).pack(side="left")
+
+        self.preview_count_label = tk.Label(
+            preview_header, text="Chưa có dữ liệu",
+            font=FONT_DROP_SM, bg=BG_DARK, fg=TEXT_MUTED
+        )
+        self.preview_count_label.pack(side="left", padx=(10, 0))
+
+        self.select_none_btn = tk.Button(
+            preview_header,
+            text="Bỏ chọn",
+            font=FONT_DROP_SM,
+            bg=BG_CARD, fg=TEXT_MUTED,
+            activebackground=BORDER, activeforeground=TEXT_PRIMARY,
+            relief="flat", bd=0,
+            padx=10, pady=4,
+            cursor="hand2",
+            command=lambda: self._set_all_preview_rows(False)
+        )
+        self.select_none_btn.pack(side="left", padx=(14, 0))
+
+        self.select_all_btn = tk.Button(
+            preview_header,
+            text="Chọn tất cả",
+            font=FONT_DROP_SM,
+            bg=BG_CARD, fg=TEXT_MUTED,
+            activebackground=BORDER, activeforeground=TEXT_PRIMARY,
+            relief="flat", bd=0,
+            padx=10, pady=4,
+            cursor="hand2",
+            command=lambda: self._set_all_preview_rows(True)
+        )
+        self.select_all_btn.pack(side="left", padx=(8, 0))
+
+        self.right_filter_frame = tk.Frame(preview_header, bg=BG_DARK)
+        self.right_filter_frame.pack(side="right", padx=(0, 8))
+
+        self.search_frame = tk.Frame(self.right_filter_frame, bg=BG_DARK)
+        self.search_frame.pack_forget()
+
+        tk.Label(
+            self.search_frame, text="Tìm công ty",
+            font=FONT_DROP_SM, bg=BG_DARK, fg=TEXT_MUTED
+        ).pack(side="left", padx=(0, 8))
+
+        self.search_box = tk.Frame(
+            self.search_frame,
+            bg=BG_CARD,
+            highlightbackground=BORDER,
+            highlightcolor=ACCENT,
+            highlightthickness=1,
+        )
+        self.search_box.pack(side="left")
+
+        self.search_entry = tk.Entry(
+            self.search_box,
+            textvariable=self.company_search,
+            font=FONT_PATH,
+            bg=BG_CARD,
+            fg=TEXT_PRIMARY,
+            insertbackground=ACCENT,
+            relief="flat",
+            bd=0,
+            width=20,
+        )
+        self.search_entry.pack(side="left", ipady=4)
+
+        self.clear_search_btn = tk.Button(
+            self.search_box,
+            text="x",
+            font=("Segoe UI", 10, "bold"),
+            bg=BG_CARD,
+            fg=ACCENT_GLOW,
+            activebackground=BORDER,
+            activeforeground=TEXT_PRIMARY,
+            relief="flat",
+            bd=0,
+            padx=6,
+            pady=1,
+            cursor="hand2",
+            command=self._clear_company_search,
+        )
+        self.clear_search_btn.pack_forget()
+
+        self.preview_filter_frame = tk.Frame(self.right_filter_frame, bg=BG_DARK)
+        self.preview_filter_frame.pack(side="left", padx=(0, 12))
+
+        tk.Label(
+            self.preview_filter_frame, text="Sale phụ trách",
+            font=FONT_DROP_SM, bg=BG_DARK, fg=TEXT_MUTED
+        ).pack(side="left", padx=(0, 8))
+
+        self.person_menu.destroy()
+        self.person_menu = tk.OptionMenu(
+            self.preview_filter_frame,
+            self.responsible_person,
+            "Tất cả"
+        )
+        self.person_menu.config(
+            bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB,
+            activebackground=ACCENT, activeforeground="#0a0a0a",
+            relief="flat", bd=0, anchor="w", indicatoron=False
+        )
+        self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
+        self.person_menu.config(width=22)
+        self.person_menu.pack(side="left")
+        self.search_frame.pack(side="left")
+
+        unused_select_all_btn = tk.Button(
+            preview_header,
+            text="Chọn tất cả",
+            font=FONT_DROP_SM,
+            bg=BG_CARD, fg=TEXT_MUTED,
+            activebackground=BORDER, activeforeground=TEXT_PRIMARY,
+            relief="flat", bd=0,
+            padx=10, pady=4,
+            cursor="hand2",
+            command=lambda: self._set_all_preview_rows(True)
+        )
+        unused_select_all_btn.pack_forget()
+
+        unused_select_none_btn = tk.Button(
+            preview_header,
+            text="Bỏ chọn",
+            font=FONT_DROP_SM,
+            bg=BG_CARD, fg=TEXT_MUTED,
+            activebackground=BORDER, activeforeground=TEXT_PRIMARY,
+            relief="flat", bd=0,
+            padx=10, pady=4,
+            cursor="hand2",
+            command=lambda: self._set_all_preview_rows(False)
+        )
+        unused_select_none_btn.pack_forget()
+
+        preview_table_frame = tk.Frame(
+            self.preview_frame,
+            bg=BG_CARD,
+            highlightbackground=BORDER,
+            highlightthickness=1
+        )
+        preview_table_frame.pack(fill="x")
+
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure(
+            "ContractPreview.Treeview",
+            background=BG_CARD,
+            foreground=TEXT_PRIMARY,
+            fieldbackground=BG_CARD,
+            rowheight=28,
+            borderwidth=0,
+            font=FONT_PATH,
+        )
+        style.configure(
+            "ContractPreview.Treeview.Heading",
+            background=BG_DROP,
+            foreground=ACCENT_GLOW,
+            relief="flat",
+            font=FONT_DROP_SM,
+        )
+        style.map(
+            "ContractPreview.Treeview.Heading",
+            background=[("active", BG_DROP), ("pressed", BG_DROP)],
+            foreground=[("active", ACCENT_GLOW), ("pressed", ACCENT_GLOW)],
+            relief=[("active", "flat"), ("pressed", "flat")],
+        )
+        style.map("ContractPreview.Treeview", background=[("selected", "#2a2418")])
+
+        self.preview_tree = ttk.Treeview(
+            preview_table_frame,
+            columns=(
+                "checked",
+                "so_hd",
+                "ten_hd",
+                "company",
+                "tax",
+                "address",
+                "account",
+                "bank",
+                "person",
+                "representative",
+                "position",
+            ),
+            show="headings",
+            height=6,
+            style="ContractPreview.Treeview",
+            selectmode="none"
+        )
+        self.preview_tree.heading("ten_hd", text="Ten HD")
+        self.preview_tree.heading("address", text="Dia chi")
+        self.preview_tree.heading("account", text="So tai khoan")
+        self.preview_tree.heading("bank", text="Ngan hang")
+        self.preview_tree.heading("position", text="Chuc vu")
+        self.preview_tree.heading("checked", text="Chon")
+        self.preview_tree.heading("so_hd", text="So HD")
+        self.preview_tree.heading("company", text="Ten cong ty")
+        self.preview_tree.heading("tax", text="Ma so thue")
+        self.preview_tree.heading("person", text="Sale")
+        self.preview_tree.heading("representative", text="Dai dien")
+
+        self.preview_tree.column("checked", width=58, minwidth=58, stretch=False, anchor="center")
+        self.preview_tree.column("so_hd", width=90, minwidth=70, stretch=False)
+        self.preview_tree.column("company", width=260, minwidth=180)
+        self.preview_tree.column("tax", width=130, minwidth=110, stretch=False)
+        self.preview_tree.column("person", width=140, minwidth=110)
+        self.preview_tree.column("representative", width=150, minwidth=110)
+        self.preview_tree.column("checked", width=58, minwidth=58, stretch=False, anchor="center")
+        self.preview_tree.column("so_hd", width=80, minwidth=70, stretch=False)
+        self.preview_tree.column("ten_hd", width=180, minwidth=140, stretch=False)
+        self.preview_tree.column("company", width=300, minwidth=220, stretch=False)
+        self.preview_tree.column("tax", width=130, minwidth=110, stretch=False)
+        self.preview_tree.column("address", width=360, minwidth=240, stretch=False)
+        self.preview_tree.column("account", width=150, minwidth=120, stretch=False)
+        self.preview_tree.column("bank", width=240, minwidth=180, stretch=False)
+        self.preview_tree.column("person", width=170, minwidth=130, stretch=False)
+        self.preview_tree.column("representative", width=170, minwidth=130, stretch=False)
+        self.preview_tree.column("position", width=130, minwidth=100, stretch=False)
+
+        preview_scroll = ttk.Scrollbar(preview_table_frame, orient="vertical", command=self.preview_tree.yview)
+        self.preview_tree.configure(yscrollcommand=preview_scroll.set)
+        self.preview_tree.pack(side="left", fill="x", expand=True)
+        preview_scroll.pack(side="right", fill="y")
+        preview_x_scroll = ttk.Scrollbar(self.preview_frame, orient="horizontal", command=self.preview_tree.xview)
+        self.preview_tree.configure(xscrollcommand=preview_x_scroll.set)
+        preview_x_scroll.pack(fill="x")
+        self.preview_tree.tag_configure("normal", background=BG_CARD, foreground=TEXT_PRIMARY)
+        self.preview_tree.tag_configure("hover", background="#24211a", foreground=TEXT_PRIMARY)
+        self.preview_tree.bind("<Button-1>", self._on_preview_click)
+        self.preview_tree.bind("<Motion>", self._on_preview_motion)
+        self.preview_tree.bind("<Leave>", self._on_preview_leave)
 
         # ── Run button ──
         btn_frame = tk.Frame(self, bg=BG_DARK, padx=30, pady=12)
@@ -358,11 +607,11 @@ class App(_BASE):
         self.excel_path.set(path)
         filename = os.path.basename(path)
         self.drop_label.config(text=filename, fg=SUCCESS)
-        self.path_label.config(fg=TEXT_MUTED)
         self._log(f"File được chọn: {path}", "accent")
         
-        # Load responsible persons into combobox
+        # Load responsible persons and contract rows from Excel
         self.after(100, lambda: self._load_responsible_persons(self.excel_path.get()))
+        self.after(120, lambda: self._load_contract_preview(self.excel_path.get()))
 
     def _load_responsible_persons(self, excel_path: str):
         """Load responsible persons from Excel into OptionMenu."""
@@ -375,11 +624,11 @@ class App(_BASE):
                 person_list = sorted([p for p in persons.keys() if p.strip()])  # Filter empty strings
                 # Recreate OptionMenu with new values
                 self.person_menu.destroy()
-                self.responsible_person.set("(Tất cả)")
+                self.responsible_person.set("Tất cả")
                 self.person_menu = tk.OptionMenu(
-                    self.selector_frame,
+                    self.preview_filter_frame,
                     self.responsible_person,
-                    "(Tất cả)",
+                    "Tất cả",
                     *person_list
                 )
                 self.person_menu.config(
@@ -388,10 +637,192 @@ class App(_BASE):
                     relief="flat", bd=0, anchor="w", indicatoron=False
                 )
                 self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
-                self.person_menu.pack(fill="x", padx=0)
+                self.person_menu.config(width=22)
+                self.person_menu.pack(side="left")
                 self._log(f"Tìm thấy {len(person_list)} sale phụ trách", "success")
         except Exception as e:
             self._log(f"Lỗi tải danh sách sale phụ trách: {e}", "warning")
+
+    def _load_contract_preview(self, excel_path: str):
+        """Load contract rows from Excel into the preview table."""
+        try:
+            if not os.path.exists(excel_path):
+                return
+
+            self.preview_tree.delete(*self.preview_tree.get_children())
+            self.preview_rows = get_contract_preview(excel_path, log=lambda x: None)
+            self.selected_row_ids = {row["row_index"] for row in self.preview_rows}
+            self._refresh_preview_table()
+
+            if self.preview_rows:
+                self._log(f"Da tai {len(self.preview_rows)} dong thong tin hop dong", "success")
+            else:
+                self._log("Khong tim thay dong hop dong hop le trong file Excel.", "warning")
+        except Exception as e:
+            self._log(f"Loi tai danh sach thong tin: {e}", "warning")
+
+    def _is_all_responsible_person_selected(self) -> bool:
+        selected_person = self.responsible_person.get().strip()
+        normalized = selected_person.casefold().replace("(", "").replace(")", "").strip()
+        return not selected_person or normalized in {"tất cả", "tat ca"}
+
+    def _get_filtered_preview_rows(self):
+        if self._is_all_responsible_person_selected():
+            rows = list(self.preview_rows)
+        else:
+            selected_person = self.responsible_person.get().strip()
+            rows = [
+                row for row in self.preview_rows
+                if row["nguoi_phu_trach"] == selected_person
+            ]
+
+        keyword = self._normalize_search_text(self.company_search.get())
+        if not keyword:
+            return rows
+
+        return [
+            row for row in rows
+            if keyword in self._normalize_search_text(row["ten_cong_ty"])
+        ]
+
+    def _normalize_search_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKD", text or "")
+        no_marks = "".join(
+            char for char in normalized
+            if unicodedata.category(char) != "Mn"
+        )
+        return no_marks.casefold().strip()
+
+    def _refresh_preview_table(self):
+        self.preview_tree.delete(*self.preview_tree.get_children())
+        self.filtered_preview_rows = self._get_filtered_preview_rows()
+
+        for row in self.filtered_preview_rows:
+            row_id = str(row["row_index"])
+            self.preview_tree.insert(
+                "",
+                "end",
+                iid=row_id,
+                tags=("normal",),
+                values=(
+                    self._checkbox_text(row["row_index"]),
+                    row["so_hd"],
+                    row["ten_hd"],
+                    row["ten_cong_ty"],
+                    row["ma_so_thue"],
+                    row["dia_chi"],
+                    row["so_tai_khoan"],
+                    row["ngan_hang"],
+                    row["nguoi_phu_trach"],
+                    row["nguoi_dai_dien"],
+                    row["chuc_vu"],
+                )
+            )
+
+        self._update_preview_count()
+        self.hovered_preview_item = None
+
+    def _on_responsible_person_changed(self, *_):
+        if self.is_running or not hasattr(self, "preview_tree"):
+            return
+        self._refresh_preview_table()
+
+    def _on_company_search_changed(self, *_):
+        if self.is_running or not hasattr(self, "preview_tree"):
+            return
+        if self.company_search.get():
+            if not self.clear_search_btn.winfo_ismapped():
+                self.clear_search_btn.pack(side="left", padx=(2, 3))
+        else:
+            if self.clear_search_btn.winfo_ismapped():
+                self.clear_search_btn.pack_forget()
+        self._refresh_preview_table()
+
+    def _clear_company_search(self):
+        self.company_search.set("")
+        self.search_entry.focus_set()
+
+    def _checkbox_text(self, row_index: int) -> str:
+        return "☑" if row_index in self.selected_row_ids else "☐"
+
+    def _on_preview_click(self, event):
+        if self.is_running:
+            return "break"
+
+        region = self.preview_tree.identify("region", event.x, event.y)
+        if region != "cell":
+            return None
+
+        item_id = self.preview_tree.identify_row(event.y)
+        if not item_id:
+            return None
+
+        row_index = int(item_id)
+        if row_index in self.selected_row_ids:
+            self.selected_row_ids.remove(row_index)
+        else:
+            self.selected_row_ids.add(row_index)
+
+        values = list(self.preview_tree.item(item_id, "values"))
+        values[0] = self._checkbox_text(row_index)
+        self.preview_tree.item(item_id, values=values)
+        self._update_preview_count()
+        return "break"
+
+    def _on_preview_motion(self, event):
+        if self.preview_tree.identify("region", event.x, event.y) != "cell":
+            previous_item = getattr(self, "hovered_preview_item", None)
+            if previous_item and self.preview_tree.exists(previous_item):
+                self.preview_tree.item(previous_item, tags=("normal",))
+            self.hovered_preview_item = None
+            return
+
+        item_id = self.preview_tree.identify_row(event.y)
+        if item_id == getattr(self, "hovered_preview_item", None):
+            return
+
+        previous_item = getattr(self, "hovered_preview_item", None)
+        if previous_item and self.preview_tree.exists(previous_item):
+            self.preview_tree.item(previous_item, tags=("normal",))
+
+        self.hovered_preview_item = item_id
+        if item_id and self.preview_tree.exists(item_id):
+            self.preview_tree.item(item_id, tags=("hover",))
+
+    def _on_preview_leave(self, _event):
+        previous_item = getattr(self, "hovered_preview_item", None)
+        if previous_item and self.preview_tree.exists(previous_item):
+            self.preview_tree.item(previous_item, tags=("normal",))
+        self.hovered_preview_item = None
+
+    def _set_all_preview_rows(self, selected: bool):
+        if self.is_running:
+            return
+
+        visible_row_ids = {row["row_index"] for row in self.filtered_preview_rows}
+        if selected:
+            self.selected_row_ids.update(visible_row_ids)
+        else:
+            self.selected_row_ids.difference_update(visible_row_ids)
+
+        for item_id in self.preview_tree.get_children():
+            row_index = int(item_id)
+            values = list(self.preview_tree.item(item_id, "values"))
+            values[0] = self._checkbox_text(row_index)
+            self.preview_tree.item(item_id, values=values)
+
+        self._update_preview_count()
+
+    def _update_preview_count(self):
+        total = len(self.filtered_preview_rows)
+        selected = len({
+            row["row_index"] for row in self.filtered_preview_rows
+            if row["row_index"] in self.selected_row_ids
+        })
+        if total:
+            self.preview_count_label.config(text=f"Đã chọn {selected}/{total}", fg=ACCENT_GLOW if selected else WARNING)
+        else:
+            self.preview_count_label.config(text="Chưa có dữ liệu", fg=TEXT_MUTED)
 
     def _log(self, message: str, tag: str = ""):
         """Append a message to the log box (thread-safe)."""
@@ -476,6 +907,17 @@ class App(_BASE):
             self._log(f"Không tìm thấy file: {excel}", "error")
             return
 
+        selected_row_ids = None
+        if self.preview_rows:
+            selected_row_ids = [
+                row["row_index"] for row in self.filtered_preview_rows
+                if row["row_index"] in self.selected_row_ids
+            ]
+
+        if self.preview_rows and not selected_row_ids:
+            self._log("Chua chon thong tin nao de xuat hop dong.", "warning")
+            return
+
         self.is_running = True
         active_button = self.docx_btn if output_format == "docx" else self.pdf_btn
         active_text = "Đang tạo Docx..." if output_format == "docx" else "Đang tạo PDF..."
@@ -483,27 +925,35 @@ class App(_BASE):
         for btn in (self.docx_btn, self.pdf_btn):
             btn.config(state="disabled", bg="#504124", fg="#8e8e93")
         self.person_menu.config(state="disabled")
+        self.select_all_btn.config(state="disabled")
+        self.select_none_btn.config(state="disabled")
         active_button.config(text=active_text)
 
         self.status_label.config(text="Đang tạo...", fg=WARNING)
         self._log("-" * 55, "muted")
         
         selected_person = self.responsible_person.get().strip()
-        if selected_person and selected_person != "(Tất cả)":
+        if not self._is_all_responsible_person_selected():
             self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} (Sale phụ trách: {selected_person})", "accent")
             # Pass actual person name
-            thread = threading.Thread(target=self._run_worker, args=(excel, output_format, selected_person), daemon=True)
+            thread = threading.Thread(target=self._run_worker, args=(excel, output_format, selected_person, selected_row_ids), daemon=True)
         else:
-            self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} (Tất cả sale phụ trách)", "accent")
+            self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} Tất cả sale phụ trách", "accent")
             # Pass None to generate all
-            thread = threading.Thread(target=self._run_worker, args=(excel, output_format, ""), daemon=True)
+            thread = threading.Thread(target=self._run_worker, args=(excel, output_format, "", selected_row_ids), daemon=True)
 
         # Run in background thread to keep UI responsive
         thread.start()
 
-    def _run_worker(self, excel_path: str, output_format: str, responsible_person: str = ""):
+    def _run_worker(self, excel_path: str, output_format: str, responsible_person: str = "", selected_rows=None):
         try:
-            success = generate(excel_path, log=self._smart_log, output_format=output_format, responsible_person=responsible_person if responsible_person else None)
+            success = generate(
+                excel_path,
+                log=self._smart_log,
+                output_format=output_format,
+                responsible_person=responsible_person if responsible_person else None,
+                selected_rows=selected_rows,
+            )
             if success:
                 self.after(0, lambda: self.status_label.config(text="Hoàn tất", fg=SUCCESS))
             else:
@@ -516,7 +966,9 @@ class App(_BASE):
             self.after(0, lambda: [
                 self.docx_btn.config(state="normal", text="Tạo HĐ Docx", bg=ACCENT, fg="#0a0a0a"),
                 self.pdf_btn.config(state="normal", text="Tạo HĐ PDF", bg=ACCENT, fg="#0a0a0a"),
-                self.person_menu.config(state="normal")
+                self.person_menu.config(state="normal"),
+                self.select_all_btn.config(state="normal"),
+                self.select_none_btn.config(state="normal")
             ])
 
 

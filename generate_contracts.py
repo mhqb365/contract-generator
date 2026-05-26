@@ -225,6 +225,52 @@ def get_docx_path(template_path, log=print):
                 pass
 
 
+def _get_cell_value(row, col_idx):
+    if col_idx >= len(row):
+        return ""
+    val = row[col_idx]
+    return str(val).strip() if pd.notna(val) else ""
+
+
+def get_contract_preview(excel_path, log=print):
+    """
+    Read Excel rows and return contract data for GUI preview.
+    row_index is the original DataFrame index, used later to generate selected rows.
+    """
+    log("Dang doc du lieu tu Excel...")
+    try:
+        df = pd.read_excel(excel_path, header=None)
+    except Exception as e:
+        log(f"Loi doc file Excel: {e}")
+        return []
+
+    preview_rows = []
+    start_idx = 1
+
+    for index in range(start_idx, len(df)):
+        row = df.iloc[index]
+        ten_cong_ty = _get_cell_value(row, 3)
+
+        if not ten_cong_ty:
+            continue
+
+        preview_rows.append({
+            "row_index": index,
+            "so_hd": _get_cell_value(row, 1),
+            "ten_hd": _get_cell_value(row, 2),
+            "ten_cong_ty": ten_cong_ty,
+            "ma_so_thue": _get_cell_value(row, 4),
+            "dia_chi": _get_cell_value(row, 5),
+            "so_tai_khoan": _get_cell_value(row, 7),
+            "ngan_hang": _get_cell_value(row, 8),
+            "nguoi_phu_trach": _get_cell_value(row, 10),
+            "nguoi_dai_dien": _get_cell_value(row, 11),
+            "chuc_vu": _get_cell_value(row, 12),
+        })
+
+    return preview_rows
+
+
 def get_responsible_persons(excel_path, log=print):
     """
     Get list of unique responsible persons (Column I) and their statistics.
@@ -247,13 +293,8 @@ def get_responsible_persons(excel_path, log=print):
     for index in range(start_idx, len(df)):
         row = df.iloc[index]
         
-        def get_val(col_idx):
-            if col_idx >= len(row): return ""
-            val = row[col_idx]
-            return str(val).strip() if pd.notna(val) else ""
-
-        ten_cong_ty = get_val(3)
-        nguoi_phu_trach = get_val(10)
+        ten_cong_ty = _get_cell_value(row, 3)
+        nguoi_phu_trach = _get_cell_value(row, 10)
 
         if not ten_cong_ty or not nguoi_phu_trach:
             continue
@@ -266,13 +307,14 @@ def get_responsible_persons(excel_path, log=print):
     return persons_data
 
 
-def generate(excel_path, log=print, output_format="both", responsible_person=None):
+def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None):
     """
     Main contract generation logic.
     :param excel_path: Path to the Excel data file.
     :param log: Callback function for logging (default: print).
     :param output_format: "docx", "pdf" or "both".
     :param responsible_person: Filter by responsible person (None = all).
+    :param selected_rows: Optional iterable of DataFrame row indexes selected in GUI.
     """
     # Safe folder/file name (remove Vietnamese diacritics and special characters completely)
     # Normalize to NFKD form and remove combining marks (diacritics)
@@ -314,12 +356,16 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     log("Bắt đầu xử lý...")
     count = 0
     generated_docs = []
+    selected_row_set = set(selected_rows) if selected_rows is not None else None
 
     # Bỏ qua dòng 1 (dòng tiêu đề)
     start_idx = 1
 
     for index in range(start_idx, len(df)):
         row = df.iloc[index]
+
+        if selected_row_set is not None and index not in selected_row_set:
+            continue
 
         # Helper: get cell value, return empty string if nan/null
         def get_val(col_idx):
