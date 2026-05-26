@@ -101,6 +101,7 @@ class App(_BASE):
         self.data_fields = self.data_settings["fields"]
         self.template_path = tk.StringVar(value=self.data_settings["template_path"])
         self._init_template_path()
+        self.cancel_event = threading.Event()
         self.is_running  = False
 
         self._build_ui()
@@ -455,6 +456,20 @@ class App(_BASE):
             command=lambda: self._run("pdf")
         )
         self.pdf_btn.pack(side="left", padx=(10, 0))
+
+        self.cancel_btn = tk.Button(
+            btn_frame,
+            text="Hủy",
+            font=FONT_BTN,
+            bg=BG_CARD, fg=TEXT_MUTED,
+            activebackground=ERROR_CLR, activeforeground=TEXT_PRIMARY,
+            relief="flat", bd=0,
+            padx=18, pady=10,
+            cursor="hand2",
+            state="disabled",
+            command=self._cancel_run
+        )
+        self.cancel_btn.pack(side="left", padx=(10, 0))
 
         self.clear_btn = tk.Button(
             btn_frame,
@@ -1067,7 +1082,7 @@ class App(_BASE):
         normalized = message.strip()
         if normalized.startswith(("Lỗi", "CẢNH BÁO", "Không có file DOCX", "Không thể")):
             tag = "error"
-        elif normalized.startswith(("Cảnh báo", "Chưa", "LibreOffice không", "Không tìm thấy")):
+        elif normalized.startswith(("Cảnh báo", "Chưa", "LibreOffice không", "Không tìm thấy", "Đã hủy")):
             tag = "warning"
         elif normalized.startswith(("Đã", "Tìm thấy", "Hoàn tất")):
             tag = "success"
@@ -1123,6 +1138,14 @@ class App(_BASE):
                 self._log(f"     ... và {len(unique_companies) - 5} công ty khác", "muted")
 
     # ── Run ────────────────────────────────────────────────────────────────────
+    def _cancel_run(self):
+        if not self.is_running:
+            return
+        self.cancel_event.set()
+        self.cancel_btn.config(state="disabled", bg="#3a1f1f", fg=TEXT_MUTED)
+        self.status_label.config(text="Đang hủy...", fg=WARNING)
+        self._log("Đã yêu cầu hủy. Sẽ dừng sau tác vụ hiện tại.", "warning")
+
     def _run(self, output_format="docx"):
         if self.is_running:
             return
@@ -1153,11 +1176,13 @@ class App(_BASE):
             return
 
         self.is_running = True
+        self.cancel_event.clear()
         active_button = self.docx_btn if output_format == "docx" else self.pdf_btn
         active_text = "Đang tạo Docx..." if output_format == "docx" else "Đang tạo PDF..."
 
         for btn in (self.docx_btn, self.pdf_btn):
             btn.config(state="disabled", bg="#504124", fg="#8e8e93")
+        self.cancel_btn.config(state="normal", bg=ERROR_CLR, fg=TEXT_PRIMARY)
         self.person_menu.config(state="disabled")
         self.select_all_btn.config(state="disabled")
         self.select_none_btn.config(state="disabled")
@@ -1188,8 +1213,11 @@ class App(_BASE):
                 responsible_person=responsible_person if responsible_person else None,
                 selected_rows=selected_rows,
                 template_path=self.template_path.get().strip(),
+                cancel_event=self.cancel_event,
             )
-            if success:
+            if success == "cancelled":
+                self.after(0, lambda: self.status_label.config(text="Đã hủy", fg=WARNING))
+            elif success:
                 self.after(0, lambda: self.status_label.config(text="Hoàn tất", fg=SUCCESS))
             else:
                 self.after(0, lambda: self.status_label.config(text="Có lỗi xảy ra", fg=WARNING))
@@ -1201,6 +1229,7 @@ class App(_BASE):
             self.after(0, lambda: [
                 self.docx_btn.config(state="normal", text="Tạo HĐ Docx", bg=ACCENT, fg="#0a0a0a"),
                 self.pdf_btn.config(state="normal", text="Tạo HĐ PDF", bg=ACCENT, fg="#0a0a0a"),
+                self.cancel_btn.config(state="disabled", bg=BG_CARD, fg=TEXT_MUTED),
                 self.person_menu.config(state="normal"),
                 self.select_all_btn.config(state="normal"),
                 self.select_none_btn.config(state="normal")

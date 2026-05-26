@@ -31,7 +31,11 @@ def find_libreoffice():
     return None
 
 
-def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
+def _is_cancelled(cancel_event):
+    return bool(cancel_event and cancel_event.is_set())
+
+
+def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print, cancel_event=None):
     """Export DOCX files to PDF using LibreOffice in headless mode."""
     soffice = find_libreoffice()
     if not soffice:
@@ -40,6 +44,9 @@ def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
     log("Đan xuất PDF bằng LibreOffice headless...")
     pdf_count = 0
     for docx_path in generated_docs:
+        if _is_cancelled(cancel_event):
+            log("Đã hủy xuất PDF.")
+            return "cancelled"
         try:
             output_dir = os.path.dirname(docx_path)
             result = subprocess.run(
@@ -65,7 +72,7 @@ def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
     return False
 
 
-def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print):
+def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print, cancel_event=None):
     """Export DOCX files to PDF using docx2pdf, which controls Microsoft Word."""
     try:
         # pyrefly: ignore [missing-import]
@@ -77,6 +84,9 @@ def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print):
     log("Đang xuất PDF bằng Microsoft Word/docx2pdf...")
     pdf_count = 0
     for docx_path in generated_docs:
+        if _is_cancelled(cancel_event):
+            log("Đã hủy xuất PDF.")
+            return "cancelled"
         pdf_path = docx_path.replace(".docx", ".pdf")
         try:
             docx2pdf_convert(docx_path, pdf_path)
@@ -91,21 +101,25 @@ def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print):
     return False
 
 
-def convert_docx_to_pdfs(generated_docs, log=print):
+def convert_docx_to_pdfs(generated_docs, log=print, cancel_event=None):
     """Export generated DOCX files to PDF using the best available platform tool."""
     if not generated_docs:
         log("\nKhông có file Word nào để xuất PDF.")
         return True
 
+    if _is_cancelled(cancel_event):
+        log("Đã hủy trước khi xuất PDF.")
+        return "cancelled"
+
     log("\nBắt đầu xuất PDF (có thể mất vài phút)...")
 
     if os.name != "nt":
-        libreoffice_result = convert_docx_to_pdfs_with_libreoffice(generated_docs, log)
+        libreoffice_result = convert_docx_to_pdfs_with_libreoffice(generated_docs, log, cancel_event)
         if libreoffice_result is not None:
             return libreoffice_result
 
         log("Không tìm thấy LibreOffice. sẽ thử Microsoft Word/docx2pdf.")
-        docx2pdf_result = convert_docx_to_pdfs_with_docx2pdf(generated_docs, log)
+        docx2pdf_result = convert_docx_to_pdfs_with_docx2pdf(generated_docs, log, cancel_event)
         if docx2pdf_result is not None:
             return docx2pdf_result
 
@@ -129,6 +143,9 @@ def convert_docx_to_pdfs(generated_docs, log=print):
             word.Visible = False
             pdf_count = 0
             for docx_path in generated_docs:
+                if _is_cancelled(cancel_event):
+                    log("Đã hủy xuất PDF.")
+                    return "cancelled"
                 pdf_path = docx_path.replace(".docx", ".pdf")
                 try:
                     doc_obj = word.Documents.Open(str(pathlib.Path(docx_path).absolute()))
@@ -157,11 +174,11 @@ def convert_docx_to_pdfs(generated_docs, log=print):
                 except Exception:
                     pass
 
-    docx2pdf_result = convert_docx_to_pdfs_with_docx2pdf(generated_docs, log)
+    docx2pdf_result = convert_docx_to_pdfs_with_docx2pdf(generated_docs, log, cancel_event)
     if docx2pdf_result is not None:
         return docx2pdf_result
 
-    libreoffice_result = convert_docx_to_pdfs_with_libreoffice(generated_docs, log)
+    libreoffice_result = convert_docx_to_pdfs_with_libreoffice(generated_docs, log, cancel_event)
     if libreoffice_result is not None:
         return libreoffice_result
 
@@ -306,7 +323,7 @@ def get_responsible_persons(excel_path, log=print):
     return persons_data
 
 
-def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None, template_path=None):
+def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None, template_path=None, cancel_event=None):
     """
     Main contract generation logic.
     :param excel_path: Path to the Excel data file.
@@ -315,6 +332,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     :param responsible_person: Filter by responsible person (None = all).
     :param selected_rows: Optional iterable of DataFrame row indexes selected in GUI.
     :param template_path: Optional Word template path. Uses saved settings when omitted.
+    :param cancel_event: Optional threading.Event used to cancel long runs.
     """
     # Safe folder/file name (remove Vietnamese diacritics and special characters completely)
     # Normalize to NFKD form and remove combining marks (diacritics)
@@ -335,6 +353,10 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         template_path_obj = script_dir / template_path_obj
     template_path = str(template_path_obj)
     base_output_dir = str(script_dir / "contracts")
+
+    if _is_cancelled(cancel_event):
+        log("Đã hủy trước khi bắt đầu.")
+        return "cancelled"
 
     if not os.path.exists(base_output_dir):
         os.makedirs(base_output_dir)
@@ -369,6 +391,10 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     start_idx = 1
 
     for index in range(start_idx, len(df)):
+        if _is_cancelled(cancel_event):
+            log("Đã hủy tạo hợp đồng.")
+            return "cancelled"
+
         row = df.iloc[index]
 
         if selected_row_set is not None and index not in selected_row_set:
@@ -432,6 +458,10 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
             log(f"Lỗi nạp template: {e}")
             break
 
+        if _is_cancelled(cancel_event):
+            log("Đã hủy tạo hợp đồng.")
+            return "cancelled"
+
         context = {
             "so_hd":                  so_hd,
             "ten_hd":                 ten_hd,
@@ -466,20 +496,24 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     if not should_convert_pdf:
         return True
 
+    if _is_cancelled(cancel_event):
+        log("Đã hủy trước khi xuất PDF.")
+        return "cancelled"
+
     if count == 0:
         log("Không có file DOCX để chuyển đổi sang PDF.")
         return False
 
     if output_format == "pdf":
         # When user explicitly requests PDF, conversion failure should be reported.
-        return convert_docx_to_pdfs(generated_docs, log)
+        return convert_docx_to_pdfs(generated_docs, log, cancel_event)
 
     # output_format == "both"
     if os.name == 'nt':
-        return convert_docx_to_pdfs(generated_docs, log)
+        return convert_docx_to_pdfs(generated_docs, log, cancel_event)
     else:
         if find_libreoffice():
-            return convert_docx_to_pdfs(generated_docs, log)
+            return convert_docx_to_pdfs(generated_docs, log, cancel_event)
         else:
             log("\nLibreOffice không được cài đặt. Bỏ qua chuyển đổi PDF.")
             log("Để convert PDF trên macOS, cài đặt LibreOffice:")
