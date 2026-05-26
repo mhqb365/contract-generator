@@ -1151,11 +1151,11 @@ class App(_BASE):
         
         selected_person = self.responsible_person.get().strip()
         if not self._is_all_responsible_person_selected():
-            self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} (Sale phụ trách: {selected_person})", "accent")
+            self._log(f"Chuẩn bị xử lý file: {os.path.basename(excel)} (Sale phụ trách: {selected_person})", "accent")
             # Pass actual person name
             thread = threading.Thread(target=self._run_worker, args=(excel, output_format, selected_person, selected_row_ids), daemon=True)
         else:
-            self._log(f"Bắt đầu xử lý file: {os.path.basename(excel)} Tất cả sale phụ trách", "accent")
+            self._log(f"Chuẩn bị xử lý file: {os.path.basename(excel)} Tất cả sale phụ trách", "accent")
             # Pass None to generate all
             thread = threading.Thread(target=self._run_worker, args=(excel, output_format, "", selected_row_ids), daemon=True)
 

@@ -348,8 +348,6 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         log("Hãy đảm bảo file không đang được mở trong Excel.")
         return False
 
-    log(f"Đọc được {len(df)} dòng dữ liệu.")
-
     if not os.path.exists(template_path):
         log(f"Không tìm thấy file template: {template_path}")
         return False
@@ -361,7 +359,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
         log("Vui lòng mở file templates/HDNT.doc bằng Microsoft Word, nhấn 'Save As' -> .docx")
         return False
 
-    log("Bắt đầu xử lý...")
+    log("Bắt đầu tạo hợp đồng...")
     count = 0
     generated_docs = []
     selected_row_set = set(selected_rows) if selected_rows is not None else None
