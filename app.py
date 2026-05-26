@@ -1036,9 +1036,11 @@ class App(_BASE):
         """Append a message to the log box (thread-safe)."""
         def _append():
             self.log_box.config(state="normal")
-            time_str = datetime.now().strftime("%H:%M:%S")
-            self.log_box.insert("end", f"[{time_str}] ", "time")
-            self.log_box.insert("end", message + "\n", tag if tag else "")
+            lines = str(message).splitlines() or [""]
+            for line in lines:
+                time_str = datetime.now().strftime("%H:%M:%S")
+                self.log_box.insert("end", f"[{time_str}] ", "time")
+                self.log_box.insert("end", line + "\n", tag if tag else "")
             self.log_box.see("end")
             self.log_box.config(state="disabled")
         self.after(0, _append)
