@@ -227,18 +227,7 @@ class App(_BASE):
 
         self.responsible_person = tk.StringVar(value="")
         self.responsible_person.trace_add("write", lambda *_: self._on_responsible_person_changed())
-        self.person_menu = tk.OptionMenu(
-            self.selector_frame,
-            self.responsible_person,
-            "Tất cả"
-        )
-        self.person_menu.config(
-            bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB,
-            activebackground=ACCENT, activeforeground="#0a0a0a",
-            relief="flat", bd=0, anchor="w", indicatoron=False
-        )
-        self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
-        self.person_menu.pack(fill="x", padx=0)
+        self.person_menu = None
 
         # ── Excel preview with row selection ──
         self.preview_frame = tk.Frame(self, bg=BG_DARK, padx=30)
@@ -342,20 +331,16 @@ class App(_BASE):
             font=FONT_DROP_SM, bg=BG_DARK, fg=TEXT_MUTED
         ).pack(side="left", padx=(0, 8))
 
-        self.person_menu.destroy()
-        self.person_menu = tk.OptionMenu(
+        self.person_box = tk.Frame(
             self.preview_filter_frame,
-            self.responsible_person,
-            "Tất cả"
+            bg=BG_CARD,
+            highlightbackground=BORDER,
+            highlightcolor=ACCENT,
+            highlightthickness=1,
         )
-        self.person_menu.config(
-            bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB,
-            activebackground=ACCENT, activeforeground="#0a0a0a",
-            relief="flat", bd=0, anchor="w", indicatoron=False
-        )
-        self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
-        self.person_menu.config(width=22)
-        self.person_menu.pack(side="left")
+        self.person_box.pack(side="left")
+
+        self._set_person_options(["Tất cả"])
         self.search_frame.pack(side="left")
 
         unused_select_all_btn = tk.Button(
@@ -591,6 +576,52 @@ class App(_BASE):
             width = 300 if field.get("role") == "company" else 160
             minwidth = 220 if field.get("role") == "company" else 110
             self.preview_tree.column(column_id, width=width, minwidth=minwidth, stretch=False)
+
+    def _set_person_options(self, options):
+        if getattr(self, "person_menu", None) is not None:
+            self.person_menu.destroy()
+
+        options = [option for option in options if option]
+        if not options:
+            options = ["Tất cả"]
+        if self.responsible_person.get() not in options:
+            self.responsible_person.set(options[0])
+
+        self.person_menu = tk.Menubutton(
+            self.person_box,
+            textvariable=self.responsible_person,
+            font=FONT_PATH,
+            bg=BG_CARD,
+            fg=TEXT_PRIMARY,
+            activebackground=BG_CARD,
+            activeforeground=TEXT_PRIMARY,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            anchor="w",
+            width=22,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+        )
+        menu = tk.Menu(
+            self.person_menu,
+            tearoff=0,
+            bg=BG_CARD,
+            fg=TEXT_PRIMARY,
+            activebackground=ACCENT,
+            activeforeground="#0a0a0a",
+            relief="flat",
+            bd=0,
+            font=FONT_SUB,
+        )
+        for option in options:
+            menu.add_command(
+                label=option,
+                command=lambda value=option: self.responsible_person.set(value),
+            )
+        self.person_menu["menu"] = menu
+        self.person_menu.pack(side="left", fill="x")
 
     def _open_data_settings(self):
         if self.is_running:
@@ -831,7 +862,7 @@ class App(_BASE):
         self._log(f"Mẫu HĐ được chọn: {path}", "accent")
 
     def _load_responsible_persons(self, excel_path: str):
-        """Load responsible persons from Excel into OptionMenu."""
+        """Load responsible persons from Excel into the sale selector."""
         try:
             if not os.path.exists(excel_path):
                 return
@@ -839,23 +870,9 @@ class App(_BASE):
             persons = get_responsible_persons(excel_path, log=lambda x: None)
             if persons:
                 person_list = sorted([p for p in persons.keys() if p.strip()])  # Filter empty strings
-                # Recreate OptionMenu with new values
-                self.person_menu.destroy()
+                # Recreate sale selector with new values.
                 self.responsible_person.set("Tất cả")
-                self.person_menu = tk.OptionMenu(
-                    self.preview_filter_frame,
-                    self.responsible_person,
-                    "Tất cả",
-                    *person_list
-                )
-                self.person_menu.config(
-                    bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB,
-                    activebackground=ACCENT, activeforeground="#0a0a0a",
-                    relief="flat", bd=0, anchor="w", indicatoron=False
-                )
-                self.person_menu["menu"].config(bg=BG_CARD, fg=ACCENT_GLOW, font=FONT_SUB)
-                self.person_menu.config(width=22)
-                self.person_menu.pack(side="left")
+                self._set_person_options(["Tất cả", *person_list])
                 self._log(f"Tìm thấy {len(person_list)} sale phụ trách", "success")
         except Exception as e:
             self._log(f"Lỗi tải danh sách sale phụ trách: {e}", "warning")

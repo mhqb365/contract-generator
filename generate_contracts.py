@@ -54,7 +54,7 @@ def convert_docx_to_pdfs_with_libreoffice(generated_docs, log=print):
                 
             pdf_path = docx_path.replace(".docx", ".pdf")
             if os.path.exists(pdf_path):
-                log(f"PDF:  {os.path.basename(pdf_path)}")
+                log(f"PDF: {os.path.basename(pdf_path)}")
                 pdf_count += 1
         except Exception as e:
             log(f"Lỗi xuất PDF bằng LibreOffice '{os.path.basename(docx_path)}': {e}")
