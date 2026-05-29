@@ -36,7 +36,7 @@ except ImportError:
 
 # Import logic module
 from generate_contracts import generate, get_contract_preview, get_responsible_persons
-from data_config import default_fields, default_template_path, load_data_settings, save_data_settings
+from data_config import default_fields, default_pdf_engine, default_template_path, load_data_settings, save_data_settings
 
 # ── Color palette (Luxury Gold & Black) ──────────────────────────────────────────
 BG_DARK       = "#0a0a0a"  # Obsidian black
@@ -100,6 +100,7 @@ class App(_BASE):
         self.data_settings = load_data_settings()
         self.data_fields = self.data_settings["fields"]
         self.template_path = tk.StringVar(value=self.data_settings["template_path"])
+        self.pdf_engine = tk.StringVar(value=self.data_settings.get("pdf_engine", default_pdf_engine()))
         self._init_template_path()
         self.cancel_event = threading.Event()
         self.is_running  = False
@@ -486,7 +487,7 @@ class App(_BASE):
 
         self.settings_btn = tk.Button(
             btn_frame,
-            text="Thiết lập dữ liệu",
+            text="Thiết lập",
             font=FONT_BTN,
             bg=BG_CARD, fg=TEXT_MUTED,
             activebackground=BORDER, activeforeground=TEXT_PRIMARY,
@@ -582,12 +583,12 @@ class App(_BASE):
 
     def _configure_preview_columns(self):
         self.preview_tree["columns"] = self._preview_columns()
-        self.preview_tree.heading("checked", text="Chọn")
+        self.preview_tree.heading("checked", text="Chọn", anchor="w")
         self.preview_tree.column("checked", width=58, minwidth=58, stretch=False, anchor="center")
 
         for field in self.data_fields:
             column_id = field["template_name"]
-            self.preview_tree.heading(column_id, text=field["display_name"])
+            self.preview_tree.heading(column_id, text=field["display_name"], anchor="w")
             width = 300 if field.get("role") == "company" else 160
             minwidth = 220 if field.get("role") == "company" else 110
             self.preview_tree.column(column_id, width=width, minwidth=minwidth, stretch=False)
@@ -640,29 +641,74 @@ class App(_BASE):
 
     def _open_data_settings(self):
         if self.is_running:
-            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi thiết lập dữ liệu.", "warning")
+            self._log("Vui lòng đợi quá trình tạo hợp đồng hoàn tất trước khi mở thiết lập.", "warning")
             return
 
         window = tk.Toplevel(self)
-        window.title("Thiết lập dữ liệu")
+        window.title("Thiết lập")
         window.configure(bg=BG_DARK)
         window.transient(self)
         window.grab_set()
-        window.geometry("760x520")
-        window.minsize(680, 420)
+        window.geometry("820x520")
+        window.minsize(820, 520)
 
-        tk.Label(window, text="Thiết lập dữ liệu", font=FONT_LABEL, bg=BG_DARK, fg=TEXT_PRIMARY).pack(anchor="w", padx=18, pady=(16, 8))
+        tk.Label(window, text="Thiết lập", font=FONT_LABEL, bg=BG_DARK, fg=TEXT_PRIMARY).pack(anchor="w", padx=18, pady=(16, 8))
 
-        table_frame = tk.Frame(window, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
-        table_frame.pack(fill="both", expand=True, padx=18, pady=(0, 12))
+        pdf_settings = tk.Frame(window, bg=BG_DARK)
+        pdf_settings.pack(fill="x", padx=18, pady=(0, 12))
 
-        tree = ttk.Treeview(table_frame, columns=("template_name", "excel_column", "display_name"), show="headings", height=12, style="ContractPreview.Treeview", selectmode="browse")
-        tree.heading("template_name", text="{{template_name}}")
-        tree.heading("excel_column", text="Cột Excel")
-        tree.heading("display_name", text="Header bảng")
-        tree.column("template_name", width=240, minwidth=180, stretch=True)
-        tree.column("excel_column", width=100, minwidth=80, stretch=False)
-        tree.column("display_name", width=260, minwidth=160, stretch=True)
+        tk.Label(pdf_settings, text="Công cụ xuất PDF", font=FONT_DROP_SM, bg=BG_DARK, fg=TEXT_MUTED).pack(side="left", padx=(0, 10))
+        working_pdf_engine = tk.StringVar(value=self.pdf_engine.get())
+        pdf_engine_label = tk.StringVar(value="LibreOffice" if working_pdf_engine.get() == "libreoffice" else "Microsoft Word")
+        pdf_engine_menu = tk.Menubutton(
+            pdf_settings,
+            textvariable=pdf_engine_label,
+            font=FONT_PATH,
+            bg=BG_CARD,
+            fg=TEXT_PRIMARY,
+            activebackground=BG_CARD,
+            activeforeground=TEXT_PRIMARY,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            anchor="w",
+            width=18,
+            padx=8,
+            pady=5,
+            cursor="hand2",
+        )
+        pdf_menu = tk.Menu(
+            pdf_engine_menu,
+            tearoff=0,
+            bg=BG_CARD,
+            fg=TEXT_PRIMARY,
+            activebackground=ACCENT,
+            activeforeground="#0a0a0a",
+            relief="flat",
+            bd=0,
+            font=FONT_SUB,
+        )
+
+        def set_pdf_engine(value, label):
+            working_pdf_engine.set(value)
+            pdf_engine_label.set(label)
+
+        pdf_menu.add_command(label="LibreOffice", command=lambda: set_pdf_engine("libreoffice", "LibreOffice"))
+        pdf_menu.add_command(label="Microsoft Word", command=lambda: set_pdf_engine("word", "Microsoft Word"))
+        pdf_engine_menu["menu"] = pdf_menu
+        pdf_engine_menu.pack(side="left")
+
+        table_frame = tk.Frame(window, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1, height=310)
+        table_frame.pack(fill="x", expand=False, padx=18, pady=(0, 14))
+        table_frame.pack_propagate(False)
+
+        tree = ttk.Treeview(table_frame, columns=("template_name", "excel_column", "display_name"), show="headings", height=10, style="ContractPreview.Treeview", selectmode="browse")
+        tree.heading("template_name", text="Docx template", anchor="w")
+        tree.heading("excel_column", text="Cột Excel", anchor="w")
+        tree.heading("display_name", text="Tên hiển thị trên app", anchor="w")
+        tree.column("template_name", width=330, minwidth=220, stretch=True)
+        tree.column("excel_column", width=120, minwidth=90, stretch=False, anchor="w")
+        tree.column("display_name", width=340, minwidth=220, stretch=True)
         tree.pack(side="left", fill="both", expand=True)
 
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=tree.yview)
@@ -747,12 +793,14 @@ class App(_BASE):
 
         def save_and_close():
             apply_editor()
-            self.data_fields = save_data_settings(working_fields, self.template_path.get().strip())
+            self.pdf_engine.set(working_pdf_engine.get())
+            self.data_fields = save_data_settings(working_fields, self.template_path.get().strip(), self.pdf_engine.get())
             self._configure_preview_columns()
             if self.excel_path.get().strip():
                 self._load_responsible_persons(self.excel_path.get())
                 self._load_contract_preview(self.excel_path.get())
             self._log("Đã lưu thiết lập dữ liệu vào data_fields.json", "success")
+            self._log(f"Công cụ xuất PDF mặc định: {'LibreOffice' if self.pdf_engine.get() == 'libreoffice' else 'Microsoft Word'}", "accent")
             window.destroy()
 
         tree.bind("<<TreeviewSelect>>", fill_editor)
@@ -1086,7 +1134,7 @@ class App(_BASE):
             tag = "warning"
         elif normalized.startswith(("Đã", "Tìm thấy", "Hoàn tất")):
             tag = "success"
-        elif normalized.startswith(("Đang", "Bắt đầu", "DOCX:", "PDF:")):
+        elif normalized.startswith(("Đang", "Bắt đầu", "DOCX:", "PDF:", "Công cụ xuất PDF")):
             tag = "accent"
         else:
             tag = ""
@@ -1190,6 +1238,8 @@ class App(_BASE):
 
         self.status_label.config(text="Đang tạo...", fg=WARNING)
         self._log("-" * 55, "muted")
+        if output_format == "pdf":
+            self._log(f"Công cụ xuất PDF đã chọn: {'LibreOffice' if self.pdf_engine.get() == 'libreoffice' else 'Microsoft Word'}", "accent")
         
         selected_person = self.responsible_person.get().strip()
         if not self._is_all_responsible_person_selected():
@@ -1214,6 +1264,7 @@ class App(_BASE):
                 selected_rows=selected_rows,
                 template_path=self.template_path.get().strip(),
                 cancel_event=self.cancel_event,
+                pdf_engine=self.pdf_engine.get(),
             )
             if success == "cancelled":
                 self.after(0, lambda: self.status_label.config(text="Đã hủy", fg=WARNING))

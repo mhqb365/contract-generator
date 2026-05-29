@@ -9,7 +9,7 @@ from datetime import datetime
 from docxtpl import DocxTemplate
 import pathlib
 import unicodedata
-from data_config import get_role_value, load_data_fields, load_template_path, make_row_context
+from data_config import get_role_value, load_data_fields, load_pdf_engine, load_template_path, make_row_context
 
 try:
     import win32com.client as win32
@@ -22,6 +22,14 @@ def find_libreoffice():
     soffice = shutil.which("soffice") or shutil.which("libreoffice")
     if soffice:
         return soffice
+
+    if os.name == "nt":
+        for base_dir in (os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)")):
+            if not base_dir:
+                continue
+            windows_soffice = os.path.join(base_dir, "LibreOffice", "program", "soffice.exe")
+            if os.path.exists(windows_soffice):
+                return windows_soffice
 
     if sys.platform == "darwin":
         macos_soffice = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
@@ -101,7 +109,97 @@ def convert_docx_to_pdfs_with_docx2pdf(generated_docs, log=print, cancel_event=N
     return False
 
 
-def convert_docx_to_pdfs(generated_docs, log=print, cancel_event=None):
+def convert_docx_to_pdfs_with_word(generated_docs, log=print, cancel_event=None):
+    """Export DOCX files to PDF using Microsoft Word when available."""
+    log("Công cụ xuất PDF: Microsoft Word")
+
+    if os.name != "nt":
+        return convert_docx_to_pdfs_with_docx2pdf(generated_docs, log, cancel_event)
+
+    if win32 is None:
+        log("Không tìm thấy pywin32/win32com để điều khiển Microsoft Word.")
+        return None
+
+    word = None
+    com_initialized = False
+    try:
+        try:
+            import pythoncom
+
+            pythoncom.CoInitialize()
+            com_initialized = True
+        except ImportError:
+            pythoncom = None
+
+        word = win32.Dispatch('Word.Application')
+        word.Visible = False
+        pdf_count = 0
+        for docx_path in generated_docs:
+            if _is_cancelled(cancel_event):
+                log("Đã hủy xuất PDF.")
+                return "cancelled"
+            pdf_path = docx_path.replace(".docx", ".pdf")
+            try:
+                doc_obj = word.Documents.Open(str(pathlib.Path(docx_path).absolute()))
+                # 17 = wdFormatPDF
+                doc_obj.SaveAs(str(pathlib.Path(pdf_path).absolute()), FileFormat=17)
+                doc_obj.Close(0)  # 0 = wdDoNotSaveChanges
+                pdf_name = os.path.basename(pdf_path)
+                log(f"PDF:  {pdf_name}")
+                pdf_count += 1
+            except Exception as e:
+                log(f"Lỗi xuất PDF '{os.path.basename(docx_path)}': {e}")
+        log(f"\nHoàn tất! Đã xuất {pdf_count} file PDF.")
+        return True
+    except Exception as e:
+        log(f"\nLỗi khi khởi động Word để xuất PDF: {e}")
+        return False
+    finally:
+        if word is not None:
+            try:
+                word.Quit()
+            except Exception:
+                pass
+        if com_initialized:
+            try:
+                pythoncom.CoUninitialize()
+            except Exception:
+                pass
+
+
+def convert_docx_to_pdfs(generated_docs, log=print, cancel_event=None, pdf_engine=None):
+    """Export generated DOCX files to PDF using the configured platform tool."""
+    if not generated_docs:
+        log("\nKhông có file Word nào để xuất PDF.")
+        return True
+
+    if _is_cancelled(cancel_event):
+        log("Đã hủy trước khi xuất PDF.")
+        return "cancelled"
+
+    log("\nBắt đầu xuất PDF (có thể mất vài phút)...")
+    pdf_engine = (pdf_engine or load_pdf_engine()).strip().lower()
+
+    if pdf_engine == "libreoffice":
+        log("Công cụ xuất PDF: LibreOffice")
+        libreoffice_result = convert_docx_to_pdfs_with_libreoffice(generated_docs, log, cancel_event)
+        if libreoffice_result is not None:
+            return libreoffice_result
+        log("Không tìm thấy LibreOffice/soffice. Hãy cài LibreOffice hoặc đổi cài đặt PDF sang Word.")
+        return False
+
+    if pdf_engine == "word":
+        word_result = convert_docx_to_pdfs_with_word(generated_docs, log, cancel_event)
+        if word_result is not None:
+            return word_result
+        log("Không thể xuất PDF bằng Microsoft Word. Hãy cài Word/docx2pdf hoặc đổi cài đặt PDF sang LibreOffice.")
+        return False
+
+    log(f"Công cụ xuất PDF không hợp lệ: {pdf_engine}. Đang dùng LibreOffice.")
+    return convert_docx_to_pdfs(generated_docs, log, cancel_event, "libreoffice")
+
+
+def convert_docx_to_pdfs_auto(generated_docs, log=print, cancel_event=None):
     """Export generated DOCX files to PDF using the best available platform tool."""
     if not generated_docs:
         log("\nKhông có file Word nào để xuất PDF.")
@@ -127,52 +225,9 @@ def convert_docx_to_pdfs(generated_docs, log=print, cancel_event=None):
         log("macOS nen cai LibreOffice de xuat PDF headless, không cần mở Microsoft Word.")
         return False
 
-    if win32 is not None:
-        word = None
-        com_initialized = False
-        try:
-            try:
-                import pythoncom
-
-                pythoncom.CoInitialize()
-                com_initialized = True
-            except ImportError:
-                pythoncom = None
-
-            word = win32.Dispatch('Word.Application')
-            word.Visible = False
-            pdf_count = 0
-            for docx_path in generated_docs:
-                if _is_cancelled(cancel_event):
-                    log("Đã hủy xuất PDF.")
-                    return "cancelled"
-                pdf_path = docx_path.replace(".docx", ".pdf")
-                try:
-                    doc_obj = word.Documents.Open(str(pathlib.Path(docx_path).absolute()))
-                    # 17 = wdFormatPDF
-                    doc_obj.SaveAs(str(pathlib.Path(pdf_path).absolute()), FileFormat=17)
-                    doc_obj.Close(0)  # 0 = wdDoNotSaveChanges
-                    pdf_name = os.path.basename(pdf_path)
-                    log(f"PDF:  {pdf_name}")
-                    pdf_count += 1
-                except Exception as e:
-                    log(f"Lỗi xuất PDF '{os.path.basename(docx_path)}': {e}")
-            log(f"\nHoàn tất! Đã xuất {pdf_count} file PDF.")
-            return True
-        except Exception as e:
-            log(f"\nLỗi khi khởi động Word để xuất PDF: {e}")
-            return False
-        finally:
-            if word is not None:
-                try:
-                    word.Quit()
-                except Exception:
-                    pass
-            if com_initialized:
-                try:
-                    pythoncom.CoUninitialize()
-                except Exception:
-                    pass
+    word_result = convert_docx_to_pdfs_with_word(generated_docs, log, cancel_event)
+    if word_result is not None:
+        return word_result
 
     docx2pdf_result = convert_docx_to_pdfs_with_docx2pdf(generated_docs, log, cancel_event)
     if docx2pdf_result is not None:
@@ -323,7 +378,7 @@ def get_responsible_persons(excel_path, log=print):
     return persons_data
 
 
-def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None, template_path=None, cancel_event=None):
+def generate(excel_path, log=print, output_format="both", responsible_person=None, selected_rows=None, template_path=None, cancel_event=None, pdf_engine=None):
     """
     Main contract generation logic.
     :param excel_path: Path to the Excel data file.
@@ -333,6 +388,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
     :param selected_rows: Optional iterable of DataFrame row indexes selected in GUI.
     :param template_path: Optional Word template path. Uses saved settings when omitted.
     :param cancel_event: Optional threading.Event used to cancel long runs.
+    :param pdf_engine: Optional PDF exporter: "libreoffice" or "word".
     """
     # Safe folder/file name (remove Vietnamese diacritics and special characters completely)
     # Normalize to NFKD form and remove combining marks (diacritics)
@@ -348,6 +404,7 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
 
     script_dir = pathlib.Path(__file__).parent
     template_path = template_path or load_template_path()
+    pdf_engine = (pdf_engine or load_pdf_engine()).strip().lower()
     template_path_obj = pathlib.Path(template_path)
     if not template_path_obj.is_absolute():
         template_path_obj = script_dir / template_path_obj
@@ -506,19 +563,10 @@ def generate(excel_path, log=print, output_format="both", responsible_person=Non
 
     if output_format == "pdf":
         # When user explicitly requests PDF, conversion failure should be reported.
-        return convert_docx_to_pdfs(generated_docs, log, cancel_event)
+        return convert_docx_to_pdfs(generated_docs, log, cancel_event, pdf_engine)
 
     # output_format == "both"
-    if os.name == 'nt':
-        return convert_docx_to_pdfs(generated_docs, log, cancel_event)
-    else:
-        if find_libreoffice():
-            return convert_docx_to_pdfs(generated_docs, log, cancel_event)
-        else:
-            log("\nLibreOffice không được cài đặt. Bỏ qua chuyển đổi PDF.")
-            log("Để convert PDF trên macOS, cài đặt LibreOffice:")
-            log("https://www.libreoffice.org/download/download/")
-            return True  # Still return True vì DOCX đã được tạo thành công
+    return convert_docx_to_pdfs(generated_docs, log, cancel_event, pdf_engine)
 
 
 def main():

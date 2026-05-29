@@ -5,6 +5,8 @@ import re
 
 CONFIG_PATH = pathlib.Path(__file__).parent / "data_fields.json"
 DEFAULT_TEMPLATE_PATH = "templates/HDNT.docx"
+DEFAULT_PDF_ENGINE = "libreoffice"
+PDF_ENGINES = {"libreoffice", "word"}
 
 
 DEFAULT_DATA_FIELDS = [
@@ -57,6 +59,10 @@ def default_template_path():
     return DEFAULT_TEMPLATE_PATH
 
 
+def default_pdf_engine():
+    return DEFAULT_PDF_ENGINE
+
+
 def _read_config_data():
     if not CONFIG_PATH.exists():
         return {}
@@ -68,7 +74,12 @@ def _normalize_template_path(template_path):
     return (template_path or DEFAULT_TEMPLATE_PATH).strip() or DEFAULT_TEMPLATE_PATH
 
 
-def save_data_settings(fields, template_path=None):
+def _normalize_pdf_engine(pdf_engine):
+    value = (pdf_engine or DEFAULT_PDF_ENGINE).strip().lower()
+    return value if value in PDF_ENGINES else DEFAULT_PDF_ENGINE
+
+
+def save_data_settings(fields, template_path=None, pdf_engine=None):
     cleaned = []
     seen_names = set()
     for field in fields:
@@ -87,14 +98,23 @@ def save_data_settings(fields, template_path=None):
 
     if template_path is None:
         try:
-            template_path = _read_config_data().get("template_path", DEFAULT_TEMPLATE_PATH)
+            data = _read_config_data()
+            template_path = data.get("template_path", DEFAULT_TEMPLATE_PATH)
         except Exception:
             template_path = DEFAULT_TEMPLATE_PATH
+
+    if pdf_engine is None:
+        try:
+            data = _read_config_data()
+            pdf_engine = data.get("pdf_engine", DEFAULT_PDF_ENGINE)
+        except Exception:
+            pdf_engine = DEFAULT_PDF_ENGINE
 
     CONFIG_PATH.write_text(
         json.dumps(
             {
                 "template_path": _normalize_template_path(template_path),
+                "pdf_engine": _normalize_pdf_engine(pdf_engine),
                 "fields": cleaned,
             },
             ensure_ascii=False,
@@ -111,8 +131,8 @@ def save_data_fields(fields):
 
 def load_data_settings():
     if not CONFIG_PATH.exists():
-        fields = save_data_settings(default_fields(), DEFAULT_TEMPLATE_PATH)
-        return {"template_path": DEFAULT_TEMPLATE_PATH, "fields": fields}
+        fields = save_data_settings(default_fields(), DEFAULT_TEMPLATE_PATH, DEFAULT_PDF_ENGINE)
+        return {"template_path": DEFAULT_TEMPLATE_PATH, "pdf_engine": DEFAULT_PDF_ENGINE, "fields": fields}
 
     try:
         data = _read_config_data()
@@ -133,11 +153,12 @@ def load_data_settings():
             fields = save_data_settings(default_fields(), data.get("template_path", DEFAULT_TEMPLATE_PATH))
         return {
             "template_path": _normalize_template_path(data.get("template_path", DEFAULT_TEMPLATE_PATH)),
+            "pdf_engine": _normalize_pdf_engine(data.get("pdf_engine", DEFAULT_PDF_ENGINE)),
             "fields": fields,
         }
     except Exception:
-        fields = save_data_settings(default_fields(), DEFAULT_TEMPLATE_PATH)
-        return {"template_path": DEFAULT_TEMPLATE_PATH, "fields": fields}
+        fields = save_data_settings(default_fields(), DEFAULT_TEMPLATE_PATH, DEFAULT_PDF_ENGINE)
+        return {"template_path": DEFAULT_TEMPLATE_PATH, "pdf_engine": DEFAULT_PDF_ENGINE, "fields": fields}
 
 
 def load_data_fields():
@@ -146,6 +167,10 @@ def load_data_fields():
 
 def load_template_path():
     return load_data_settings()["template_path"]
+
+
+def load_pdf_engine():
+    return load_data_settings()["pdf_engine"]
 
 
 def column_letter_to_index(column):

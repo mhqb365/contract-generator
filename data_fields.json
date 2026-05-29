@@ -1,5 +1,6 @@
 {
-  "template_path": "templates/HDNT.docx",
+  "template_path": "C:/Users/Windows/contract-generator/templates/HDNT.docx",
+  "pdf_engine": "libreoffice",
   "fields": [
     {
       "template_name": "so_hd",
